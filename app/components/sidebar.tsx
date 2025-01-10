@@ -1,3 +1,4 @@
+"use client"
 import { Hash, ChevronDown, User, Plus, Trash2 } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 
