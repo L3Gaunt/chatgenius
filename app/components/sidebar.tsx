@@ -1,8 +1,10 @@
 "use client"
 import { Hash, ChevronDown, User, Plus, Trash2 } from 'lucide-react'
 import { Button } from "@/components/ui/button"
+import { DeleteConfirmationDialog } from "./delete-confirmation-dialog"
+import { useState } from 'react'
 
-const channels = ['general', 'random', 'announcements']
+const initialChannels = ['general', 'random', 'announcements']
 const directMessages = [
   { name: 'Alice', status: 'online' },
   { name: 'Bob', status: 'offline' },
@@ -10,9 +12,12 @@ const directMessages = [
 ]
 
 export function Sidebar() {
+  const [channels, setChannels] = useState(initialChannels)
+
   const handleDeleteChannel = (channel: string) => {
     // Here you would typically call an API to delete the channel
     console.log(`Deleting channel: ${channel}`)
+    setChannels(channels.filter(c => c !== channel))
   }
 
   return (
@@ -29,14 +34,20 @@ export function Sidebar() {
               <div className="flex items-center cursor-pointer">
                 <Hash size={16} className="mr-2" /> {channel}
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="hidden group-hover:flex"
-                onClick={() => handleDeleteChannel(channel)}
-              >
-                <Trash2 size={16} className="text-red-500" />
-              </Button>
+              <DeleteConfirmationDialog
+                trigger={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="hidden group-hover:flex"
+                  >
+                    <Trash2 size={16} className="text-red-500" />
+                  </Button>
+                }
+                title="Are you sure you want to delete this channel?"
+                description="This action cannot be undone. This will permanently delete the channel and all its messages."
+                onDelete={() => handleDeleteChannel(channel)}
+              />
             </li>
           ))}
           <li className="flex items-center mb-1 cursor-pointer hover:bg-gray-700 p-1 rounded text-gray-400">

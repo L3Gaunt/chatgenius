@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Smile, MessageSquare, Trash2 } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import { DeleteConfirmationDialog } from "./delete-confirmation-dialog"
 
 const emojis = ['👍', '❤️', '😂', '🎉', '🤔', '👀']
 
@@ -52,27 +52,16 @@ export const MessageComponent = ({
         <span className="text-xs text-gray-500 ml-2">{message.timestamp}</span>
       </div>
       {message.user === currentUser && (
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
+        <DeleteConfirmationDialog
+          trigger={
             <Button variant="ghost" size="sm">
               <Trash2 size={16} className="text-red-500" />
             </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Are you sure you want to delete this message?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete your message.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => onDelete(message.id)}>
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          }
+          title="Are you sure you want to delete this message?"
+          description="This action cannot be undone. This will permanently delete your message."
+          onDelete={() => onDelete(message.id)}
+        />
       )}
     </div>
     <p>{message.content}</p>
