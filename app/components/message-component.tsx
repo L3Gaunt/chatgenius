@@ -99,7 +99,7 @@ export const MessageComponent = ({
             <Smile size={16} />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-1">
+        <PopoverContent className="w-auto p-1 bg-popover border border-border shadow-md">
           <div className="flex">
             {emojis.map(emoji => (
               <Button
