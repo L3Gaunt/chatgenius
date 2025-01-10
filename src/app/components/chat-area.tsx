@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 
-// ... existing code ...
-
 const handleSendMessage = (content: string, attachments: File[]) => {
   const newMsg: Message = {
     id: Date.now(),
@@ -45,5 +43,3 @@ const handleSendMessage = (content: string, attachments: File[]) => {
     setMessages(prevMessages => [...prevMessages, newMsg])
   }
 }
-
-// ... existing code ...
