@@ -1,29 +1,47 @@
+'use client'
+
 import './globals.css'
-import type { Metadata } from 'next'
-import { Inter, Roboto_Mono } from 'next/font/google'
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-})
-
-const robotoMono = Roboto_Mono({
-  subsets: ['latin'],
-  variable: '--font-roboto',
-})
-
-export const metadata: Metadata = {
-  title: 'Slack Clone',
-  description: 'A simple Slack clone built with Next.js',
-}
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const supabase = createClientComponentClient()
+  const router = useRouter()
+
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN') {
+        // Create or update user profile
+        if (session?.user) {
+          supabase
+            .from('profiles')
+            .upsert({
+              id: session.user.id,
+              username: session.user.email?.split('@')[0] || 'user',
+              status: 'online'
+            })
+            .then(({ error }) => {
+              if (error) console.error('Error updating profile:', error)
+            })
+        }
+      }
+      router.refresh()
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [supabase, router])
+
   return (
-    <html lang="en" className={`${inter.variable} ${robotoMono.variable}`}>
+    <html lang="en">
       <body>{children}</body>
     </html>
   )
