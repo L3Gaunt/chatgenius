@@ -51,6 +51,13 @@ export function ChatInput({ onSendMessage, replyingTo, onCancelReply }: ChatInpu
     setAttachments(attachments.filter((_: File, i: number) => i !== index))
   }
 
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit(e as unknown as React.FormEvent)
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} className="p-4 border-t flex flex-col">
       {replyingTo && (
@@ -58,7 +65,15 @@ export function ChatInput({ onSendMessage, replyingTo, onCancelReply }: ChatInpu
           <span className="text-sm">
             Replying to <strong>{replyingTo.user}</strong>: {replyingTo.content}
           </span>
-          <Button variant="ghost" size="sm" onClick={onCancelReply}>
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="sm" 
+            onClick={(e) => {
+              e.preventDefault()
+              onCancelReply()
+            }}
+          >
             <X size={16} />
           </Button>
         </div>
@@ -77,6 +92,7 @@ export function ChatInput({ onSendMessage, replyingTo, onCancelReply }: ChatInpu
             placeholder={replyingTo ? "Type your reply..." : "Type a message..."}
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
             className="flex-1 mr-2"
           />
           <input
