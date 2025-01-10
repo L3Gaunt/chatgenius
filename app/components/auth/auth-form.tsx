@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { supabase } from '@/lib/supabase'
 import { FaGithub, FaGoogle } from 'react-icons/fa'
+import { useRouter } from 'next/navigation'
 
 export function AuthForm() {
   const [email, setEmail] = useState('')
@@ -12,6 +13,7 @@ export function AuthForm() {
   const [loading, setLoading] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,6 +36,8 @@ export function AuthForm() {
           password
         })
         if (error) throw error
+        router.push('/')
+        router.refresh()
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : 'An error occurred')
