@@ -5,20 +5,18 @@ import { Send, X, Paperclip } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FileAttachment } from './file-attachment'
+import { Database } from '@/types/supabase'
 
-interface Message {
-  id: number;
-  user: string;
-  content: string;
-  timestamp: string;
-  status: 'online' | 'offline' | 'away';
-  reactions: { [key: string]: number };
-  replies?: Message[];
-  attachments?: {
-    id: string;
-    name: string;
-    url: string;
+type DatabaseMessage = Database['public']['Tables']['messages']['Row']
+type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
+
+interface Message extends DatabaseMessage {
+  user: DatabaseProfile;
+  reactions: {
+    emoji: string;
+    count: number;
   }[];
+  replies?: Message[];
 }
 
 interface ChatInputProps {
@@ -63,7 +61,7 @@ export function ChatInput({ onSendMessage, replyingTo, onCancelReply }: ChatInpu
       {replyingTo && (
         <div className="mb-2 p-2 bg-gray-100 rounded flex items-center justify-between">
           <span className="text-sm">
-            Replying to <strong>{replyingTo.user}</strong>: {replyingTo.content}
+            Replying to <strong>{replyingTo.user.username}</strong>: {replyingTo.content}
           </span>
           <Button 
             type="button" 

@@ -5,103 +5,208 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { SearchBox } from './search-box'
 import { MessageComponent } from './message-component'
 import { ChatInput } from './chat-input'
+import { supabase } from '@/lib/supabase'
+import { useParams } from 'next/navigation'
+import { Database } from '@/types/supabase'
+import { RealtimeChannel } from '@supabase/supabase-js'
 
-interface Attachment {
-  id: string;
-  name: string;
-  url: string;
-}
+type DatabaseMessage = Database['public']['Tables']['messages']['Row']
+type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
 
-interface Message {
-  id: number;
-  user: string;
-  content: string;
-  timestamp: string;
-  status: 'online' | 'offline' | 'away';
-  reactions: { [key: string]: number };
+interface Message extends DatabaseMessage {
+  user: DatabaseProfile;
+  reactions: {
+    emoji: string;
+    count: number;
+  }[];
   replies?: Message[];
-  attachments?: Attachment[];
 }
-
-const initialMessages: Message[] = [
-  { 
-    id: 1, 
-    user: 'Alice', 
-    content: 'Hey everyone! How\'s it going?', 
-    timestamp: '2:30 PM', 
-    status: 'online', 
-    reactions: {},
-    replies: [
-      { id: 4, user: 'Bob', content: 'Going great, Alice!', timestamp: '2:33 PM', status: 'offline', reactions: {} },
-      { id: 5, user: 'Charlie', content: 'Busy day, but good!', timestamp: '2:35 PM', status: 'away', reactions: {} }
-    ]
-  },
-  { id: 2, user: 'Bob', content: 'I have a question about the new feature.', timestamp: '2:40 PM', status: 'offline', reactions: {} },
-  { id: 3, user: 'Charlie', content: 'Just finished the new feature. Can someone review it?', timestamp: '3:00 PM', status: 'away', reactions: {} },
-]
 
 export function ChatArea() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages)
+  const params = useParams()
+  const channelId = params.channelId as string
+  const [messages, setMessages] = useState<Message[]>([])
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const currentUser = 'You' // In a real app, this would come from authentication
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    // Fetch initial messages
+    const fetchMessages = async () => {
+      const { data: messagesData, error } = await supabase
+        .from('messages')
+        .select(`
+          *,
+          user:user_id (
+            id,
+            username,
+            status,
+            updated_at,
+            created_at
+          )
+        `)
+        .eq('channel_id', channelId)
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        console.error('Error fetching messages:', error)
+        return
+      }
+
+      // Fetch reactions for each message
+      const messagesWithReactions = await Promise.all(
+        messagesData.map(async (message) => {
+          const { data: reactions } = await supabase
+            .from('reactions')
+            .select('emoji')
+            .eq('message_id', message.id)
+
+          const reactionCounts = reactions?.reduce((acc, { emoji }) => {
+            acc[emoji] = (acc[emoji] || 0) + 1
+            return acc
+          }, {} as Record<string, number>) || {}
+
+          return {
+            ...message,
+            reactions: Object.entries(reactionCounts).map(([emoji, count]) => ({
+              emoji,
+              count
+            }))
+          } as Message
+        })
+      )
+
+      setMessages(messagesWithReactions)
+    }
+
+    fetchMessages()
+
+    // Subscribe to new messages
+    const channel: RealtimeChannel = supabase.channel(`messages:${channelId}`)
+
+    channel
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `channel_id=eq.${channelId}`
+        },
+        async (payload) => {
+          const { data: userData } = await supabase
+            .from('profiles')
+            .select('id, username, status, updated_at, created_at')
+            .eq('id', payload.new.user_id)
+            .single()
+
+          if (userData) {
+            const newMessage: Message = {
+              ...payload.new as DatabaseMessage,
+              user: userData,
+              reactions: [],
+              replies: []
+            }
+
+            setMessages(prev => [...prev, newMessage])
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      channel.unsubscribe()
+    }
+  }, [channelId])
+
+  const handleSendMessage = async (content: string, attachments: File[]) => {
+    const { data: userData } = await supabase.auth.getUser()
+    if (!userData.user) return
+
+    // Upload attachments if any
+    const uploadedAttachments = await Promise.all(
+      attachments.map(async (file) => {
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${Math.random()}.${fileExt}`
+        const filePath = `${channelId}/${fileName}`
+
+        const { data, error } = await supabase.storage
+          .from('attachments')
+          .upload(filePath, file)
+
+        if (error) {
+          console.error('Error uploading file:', error)
+          return null
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('attachments')
+          .getPublicUrl(filePath)
+
+        return {
+          id: fileName,
+          name: file.name,
+          url: publicUrl
+        }
+      })
+    )
+
+    // Insert message
+    const { error } = await supabase
+      .from('messages')
+      .insert({
+        channel_id: channelId,
+        user_id: userData.user.id,
+        content,
+        parent_message_id: replyingTo?.id || null,
+        attachments: uploadedAttachments.filter(Boolean)
+      })
+
+    if (error) {
+      console.error('Error sending message:', error)
+      return
+    }
+
+    setReplyingTo(null)
+  }
+
+  const handleReaction = async (messageId: string, emoji: string) => {
+    const { data: userData } = await supabase.auth.getUser()
+    if (!userData.user) return
+
+    const { error } = await supabase
+      .from('reactions')
+      .insert({
+        message_id: messageId,
+        user_id: userData.user.id,
+        emoji
+      })
+
+    if (error) {
+      console.error('Error adding reaction:', error)
+    }
+  }
+
+  const handleDeleteMessage = async (messageId: string) => {
+    const { error } = await supabase
+      .from('messages')
+      .delete()
+      .eq('id', messageId)
+
+    if (error) {
+      console.error('Error deleting message:', error)
+    }
+  }
+
   const filteredMessages = messages.filter(message => 
     message.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    message.user.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    message.user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (message.replies && message.replies.some(reply => 
       reply.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      reply.user.toLowerCase().includes(searchQuery.toLowerCase())
+      reply.user.username.toLowerCase().includes(searchQuery.toLowerCase())
     ))
   )
-
-  const handleSendMessage = (content: string, attachments: File[]) => {
-    const newMsg: Message = {
-      id: Date.now(),
-      user: currentUser,
-      content,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'online',
-      reactions: {},
-      attachments: attachments.map(file => ({
-        id: file.name,
-        name: file.name,
-        url: URL.createObjectURL(file)
-      }))
-    }
-
-    if (replyingTo) {
-      setMessages(messages.map(msg => 
-        msg.id === replyingTo.id 
-          ? { ...msg, replies: [...(msg.replies || []), newMsg] }
-          : msg
-      ))
-      setReplyingTo(null)
-    } else {
-      setMessages([...messages, newMsg])
-    }
-  }
-
-  const handleReaction = (messageId: number, emoji: string) => {
-    setMessages(messages.map(msg => {
-      if (msg.id === messageId) {
-        const updatedReactions = { ...msg.reactions }
-        updatedReactions[emoji] = (updatedReactions[emoji] || 0) + 1
-        return { ...msg, reactions: updatedReactions }
-      }
-      return msg
-    }))
-  }
-
-  const handleReply = (message: Message) => {
-    setReplyingTo(message)
-  }
-
-  const handleDeleteMessage = (messageId: number) => {
-    setMessages(messages.filter(msg => msg.id !== messageId))
-  }
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
@@ -130,10 +235,9 @@ export function ChatArea() {
           <MessageComponent 
             key={message.id} 
             message={message}
-            currentUser={currentUser}
             onDelete={handleDeleteMessage}
             onReaction={handleReaction}
-            onReply={handleReply}
+            onReply={setReplyingTo}
           />
         ))}
         <div ref={messagesEndRef} />
