@@ -1,28 +1,128 @@
 "use client"
+import { useEffect, useState } from 'react'
 import { Hash, ChevronDown, User, Plus, Trash2 } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog"
-import { useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import type { Database } from '@/types/supabase'
+import { useRouter } from 'next/navigation'
 
-const initialChannels = ['general', 'random', 'announcements']
-const directMessages = [
-  { name: 'Alice', status: 'online' },
-  { name: 'Bob', status: 'offline' },
-  { name: 'Charlie', status: 'away' }
-]
+type Channel = Database['public']['Tables']['channels']['Row']
+type Profile = Database['public']['Tables']['profiles']['Row']
 
 export function Sidebar() {
-  const [channels, setChannels] = useState(initialChannels)
+  const [channels, setChannels] = useState<Channel[]>([])
+  const [directMessages, setDirectMessages] = useState<Profile[]>([])
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
-  const handleDeleteChannel = (channel: string) => {
-    // Here you would typically call an API to delete the channel
-    console.log(`Deleting channel: ${channel}`)
-    setChannels(channels.filter(c => c !== channel))
+  useEffect(() => {
+    fetchChannelsAndUsers()
+
+    // Subscribe to channel changes
+    const channelSubscription = supabase
+      .channel('channel-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'channels'
+        },
+        () => {
+          fetchChannelsAndUsers()
+        }
+      )
+      .subscribe()
+
+    // Subscribe to profile changes
+    const profileSubscription = supabase
+      .channel('profile-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles'
+        },
+        () => {
+          fetchChannelsAndUsers()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      channelSubscription.unsubscribe()
+      profileSubscription.unsubscribe()
+    }
+  }, [])
+
+  const fetchChannelsAndUsers = async () => {
+    try {
+      // Fetch public channels and channels the user is a member of
+      const { data: channelsData, error: channelsError } = await supabase
+        .from('channels')
+        .select('*')
+        .order('name')
+
+      if (channelsError) throw channelsError
+
+      // Fetch all users except the current user for direct messages
+      const { data: { user } } = await supabase.auth.getUser()
+      const { data: usersData, error: usersError } = await supabase
+        .from('profiles')
+        .select('*')
+        .neq('id', user?.id)
+        .order('username')
+
+      if (usersError) throw usersError
+
+      setChannels(channelsData)
+      setDirectMessages(usersData)
+    } catch (error) {
+      console.error('Error fetching data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCreateChannel = async () => {
+    const channelName = prompt('Enter channel name:')
+    if (!channelName) return
+
+    try {
+      const { error } = await supabase
+        .from('channels')
+        .insert([
+          { name: channelName.toLowerCase(), type: 'public' }
+        ])
+
+      if (error) throw error
+    } catch (error) {
+      console.error('Error creating channel:', error)
+    }
+  }
+
+  const handleDeleteChannel = async (channelId: string) => {
+    try {
+      const { error } = await supabase
+        .from('channels')
+        .delete()
+        .eq('id', channelId)
+
+      if (error) throw error
+    } catch (error) {
+      console.error('Error deleting channel:', error)
+    }
+  }
+
+  if (loading) {
+    return <div className="w-64 bg-gray-800 text-white p-4">Loading...</div>
   }
 
   return (
     <div className="w-64 bg-gray-800 text-white p-4 flex flex-col">
-      <h1 className="text-xl font-bold mb-4">Slack Clone</h1>
+      <h1 className="text-xl font-bold mb-4">ChatGenius</h1>
       
       <div className="mb-4">
         <h2 className="flex items-center justify-between text-sm font-semibold mb-2">
@@ -30,39 +130,51 @@ export function Sidebar() {
         </h2>
         <ul>
           {channels.map((channel) => (
-            <li key={channel} className="flex items-center justify-between mb-1 hover:bg-gray-700 p-1 rounded group">
-              <div className="flex items-center cursor-pointer">
-                <Hash size={16} className="mr-2" /> {channel}
+            <li key={channel.id} className="flex items-center justify-between mb-1 hover:bg-gray-700 p-1 rounded group">
+              <div 
+                className="flex items-center cursor-pointer"
+                onClick={() => router.push(`/channels/${channel.id}`)}
+              >
+                <Hash size={16} className="mr-2" /> {channel.name}
               </div>
-              <DeleteConfirmationDialog
-                trigger={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="hidden group-hover:flex"
-                  >
-                    <Trash2 size={16} className="text-red-500" />
-                  </Button>
-                }
-                title="Are you sure you want to delete this channel?"
-                description="This action cannot be undone. This will permanently delete the channel and all its messages."
-                onDelete={() => handleDeleteChannel(channel)}
-              />
+              {channel.type === 'public' && (
+                <DeleteConfirmationDialog
+                  trigger={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="hidden group-hover:flex"
+                    >
+                      <Trash2 size={16} className="text-red-500" />
+                    </Button>
+                  }
+                  title="Are you sure you want to delete this channel?"
+                  description="This action cannot be undone. This will permanently delete the channel and all its messages."
+                  onDelete={() => handleDeleteChannel(channel.id)}
+                />
+              )}
             </li>
           ))}
-          <li className="flex items-center mb-1 cursor-pointer hover:bg-gray-700 p-1 rounded text-gray-400">
+          <li 
+            className="flex items-center mb-1 cursor-pointer hover:bg-gray-700 p-1 rounded text-gray-400"
+            onClick={handleCreateChannel}
+          >
             <Plus size={16} className="mr-2" /> Add Channel
           </li>
         </ul>
       </div>
-      
+
       <div>
         <h2 className="flex items-center justify-between text-sm font-semibold mb-2">
           Direct Messages <ChevronDown size={16} />
         </h2>
         <ul>
           {directMessages.map((user) => (
-            <li key={user.name} className="flex items-center mb-1 cursor-pointer hover:bg-gray-700 p-1 rounded">
+            <li 
+              key={user.id} 
+              className="flex items-center mb-1 cursor-pointer hover:bg-gray-700 p-1 rounded"
+              onClick={() => router.push(`/dm/${user.id}`)}
+            >
               <div className="relative mr-2">
                 <User size={16} />
                 <div className={`absolute bottom-0 right-0 w-2 h-2 rounded-full ${
@@ -70,7 +182,7 @@ export function Sidebar() {
                   user.status === 'away' ? 'bg-yellow-500' : 'bg-gray-500'
                 }`}></div>
               </div>
-              {user.name}
+              {user.username}
             </li>
           ))}
         </ul>
