@@ -1,3 +1,5 @@
+"use client"
+
 import { useState, useRef, useEffect } from 'react'
 import { Send, Smile, MessageSquare, X, Trash2, Paperclip } from 'lucide-react'
 import { Button } from "@/components/ui/button"
