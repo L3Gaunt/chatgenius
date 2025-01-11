@@ -6,9 +6,9 @@ import { SearchBox } from './search-box'
 import { MessageComponent } from './message-component'
 import { ChatInput } from './chat-input'
 import { supabase } from '@/lib/supabase'
-import { useParams } from 'next/navigation'
 import { Database } from '@/types/supabase'
 import { RealtimeChannel } from '@supabase/supabase-js'
+import { User, Hash } from 'lucide-react'
 
 type DatabaseMessage = Database['public']['Tables']['messages']['Row']
 type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
@@ -23,17 +23,26 @@ interface Message extends DatabaseMessage {
   replies?: Message[];
 }
 
-export function ChatArea() {
-  const params = useParams()
-  const channelId = params.channelId as string
+interface ChatAreaProps {
+  channelId?: string;
+  userId?: string;
+}
+
+export function ChatArea({ channelId, userId }: ChatAreaProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [channel, setChannel] = useState<Channel | null>(null)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!channelId) return
+
+    setLoading(true)
+    setMessages([])
+    
     // Fetch channel details
     const fetchChannel = async () => {
       const { data: channelData, error } = await supabase
@@ -54,13 +63,15 @@ export function ChatArea() {
   }, [channelId])
 
   useEffect(() => {
+    if (!channelId) return
+
     // Fetch initial messages
     const fetchMessages = async () => {
       const { data: messagesData, error } = await supabase
         .from('messages')
         .select(`
           *,
-          user:user_id (
+          user:profiles!messages_user_id_fkey (
             id,
             username,
             status,
@@ -100,6 +111,7 @@ export function ChatArea() {
       )
 
       setMessages(messagesWithReactions)
+      setLoading(false)
     }
 
     fetchMessages()
@@ -143,6 +155,8 @@ export function ChatArea() {
   }, [channelId])
 
   const handleSendMessage = async (content: string, attachments: File[]) => {
+    if (!channelId) return
+
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
 
@@ -247,12 +261,38 @@ export function ChatArea() {
     scrollToBottom()
   }, [messages])
 
+  if (!channelId && !userId) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-gray-500">
+        Select a channel or user to start chatting
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        Loading...
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 flex flex-col">
       <div className="p-4 border-b flex justify-between items-center">
         <div className="flex items-center">
           <h2 className="text-xl font-semibold mr-4">
-            # {channel?.name || 'Loading...'}
+            {userId ? (
+              <span className="flex items-center">
+                <User size={20} className="mr-2" />
+                Direct Message
+              </span>
+            ) : (
+              <span className="flex items-center">
+                <Hash size={20} className="mr-2" />
+                {channel?.name || 'Loading...'}
+              </span>
+            )}
           </h2>
         </div>
         <SearchBox onSearch={handleSearch} />

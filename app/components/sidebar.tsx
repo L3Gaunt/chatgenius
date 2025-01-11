@@ -5,16 +5,20 @@ import { Button } from "@/components/ui/button"
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog"
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/types/supabase'
-import { useRouter } from 'next/navigation'
 
 type Channel = Database['public']['Tables']['channels']['Row']
 type Profile = Database['public']['Tables']['profiles']['Row']
 
-export function Sidebar() {
+interface SidebarProps {
+  onChannelSelect?: (channelId: string) => void;
+  onDirectMessageSelect?: (userId: string) => void;
+}
+
+export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps) {
   const [channels, setChannels] = useState<Channel[]>([])
   const [directMessages, setDirectMessages] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
-  const router = useRouter()
+  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchChannelsAndUsers()
@@ -57,6 +61,25 @@ export function Sidebar() {
     }
   }, [])
 
+  useEffect(() => {
+    // Select general channel by default
+    const selectDefaultChannel = async () => {
+      const { data: generalChannel } = await supabase
+        .from('channels')
+        .select('id')
+        .eq('name', 'general')
+        .single()
+
+      if (generalChannel) {
+        handleChannelSelect(generalChannel.id)
+      }
+    }
+
+    if (channels.length > 0 && !selectedChannelId) {
+      selectDefaultChannel()
+    }
+  }, [channels, selectedChannelId])
+
   const fetchChannelsAndUsers = async () => {
     try {
       // Fetch public channels and channels the user is a member of
@@ -91,6 +114,23 @@ export function Sidebar() {
     if (!channelName) return
 
     try {
+      // Check if channel name already exists
+      const { data: existingChannel, error: checkError } = await supabase
+        .from('channels')
+        .select('id')
+        .eq('name', channelName.toLowerCase())
+        .single()
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        // PGRST116 means no rows returned, which is what we want
+        throw checkError
+      }
+
+      if (existingChannel) {
+        alert('A channel with this name already exists')
+        return
+      }
+
       const { error } = await supabase
         .from('channels')
         .insert([
@@ -111,9 +151,32 @@ export function Sidebar() {
         .eq('id', channelId)
 
       if (error) throw error
+
+      // If the deleted channel was selected, switch to general
+      if (channelId === selectedChannelId) {
+        const { data: generalChannel } = await supabase
+          .from('channels')
+          .select('id')
+          .eq('name', 'general')
+          .single()
+
+        if (generalChannel) {
+          handleChannelSelect(generalChannel.id)
+        }
+      }
     } catch (error) {
       console.error('Error deleting channel:', error)
     }
+  }
+
+  const handleChannelSelect = (channelId: string) => {
+    setSelectedChannelId(channelId)
+    onChannelSelect?.(channelId)
+  }
+
+  const handleDirectMessageSelect = (userId: string) => {
+    setSelectedChannelId(null)
+    onDirectMessageSelect?.(userId)
   }
 
   if (loading) {
@@ -132,12 +195,12 @@ export function Sidebar() {
           {channels.map((channel) => (
             <li key={channel.id} className="flex items-center justify-between mb-1 hover:bg-gray-700 p-1 rounded group">
               <div 
-                className="flex items-center cursor-pointer"
-                onClick={() => router.push(`/channels/${channel.id}`)}
+                className={`flex items-center cursor-pointer flex-1 ${selectedChannelId === channel.id ? 'text-blue-400' : ''}`}
+                onClick={() => handleChannelSelect(channel.id)}
               >
                 <Hash size={16} className="mr-2" /> {channel.name}
               </div>
-              {channel.type === 'public' && (
+              {channel.type === 'public' && channel.name !== 'general' && (
                 <DeleteConfirmationDialog
                   trigger={
                     <Button
@@ -173,7 +236,7 @@ export function Sidebar() {
             <li 
               key={user.id} 
               className="flex items-center mb-1 cursor-pointer hover:bg-gray-700 p-1 rounded"
-              onClick={() => router.push(`/dm/${user.id}`)}
+              onClick={() => handleDirectMessageSelect(user.id)}
             >
               <div className="relative mr-2">
                 <User size={16} />

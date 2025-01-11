@@ -1,14 +1,16 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { Sidebar } from './components/sidebar'
+import { ChatArea } from './components/chat-area'
 
 export default function Home() {
-  const router = useRouter()
+  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
 
   useEffect(() => {
-    const redirectToGeneralChannel = async () => {
+    const ensureGeneralChannel = async () => {
       // Find the general channel ID
       const { data: channels, error } = await supabase
         .from('channels')
@@ -18,7 +20,7 @@ export default function Home() {
 
       if (error || !channels) {
         // If general channel doesn't exist, create it
-        const { data: newChannel, error: createError } = await supabase
+        const { data: newChannel } = await supabase
           .from('channels')
           .insert([
             { name: 'general', type: 'public' }
@@ -26,17 +28,38 @@ export default function Home() {
           .select('id')
           .single()
 
-        if (!createError && newChannel) {
-          router.push(`/channels/${newChannel.id}`)
+        if (newChannel) {
+          setSelectedChannelId(newChannel.id)
         }
       } else {
-        router.push(`/channels/${channels.id}`)
+        setSelectedChannelId(channels.id)
       }
     }
 
-    redirectToGeneralChannel()
-  }, [router])
+    ensureGeneralChannel()
+  }, [])
 
-  return null
+  const handleChannelSelect = (channelId: string) => {
+    setSelectedChannelId(channelId)
+    setSelectedUserId(null)
+  }
+
+  const handleDirectMessageSelect = (userId: string) => {
+    setSelectedUserId(userId)
+    setSelectedChannelId(null)
+  }
+
+  return (
+    <main className="flex h-screen">
+      <Sidebar 
+        onChannelSelect={handleChannelSelect}
+        onDirectMessageSelect={handleDirectMessageSelect}
+      />
+      <ChatArea 
+        channelId={selectedChannelId || undefined}
+        userId={selectedUserId || undefined}
+      />
+    </main>
+  )
 }
 
