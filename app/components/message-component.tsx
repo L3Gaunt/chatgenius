@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Smile, MessageSquare, Trash2 } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -36,6 +37,7 @@ export const MessageComponent = ({
   onReply
 }: MessageComponentProps) => {
   const attachments = message.attachments as { id: string; name: string; url: string; }[] || []
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = React.useState(false)
   
   return (
     <div className={`mb-4 ${isReply ? 'ml-6 border-l-2 border-gray-200 pl-4' : ''}`}>
@@ -77,7 +79,7 @@ export const MessageComponent = ({
             {emoji} {count}
           </span>
         ))}
-        <Popover>
+        <Popover open={isEmojiPickerOpen} onOpenChange={setIsEmojiPickerOpen}>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="sm">
               <Smile size={16} />
@@ -90,7 +92,10 @@ export const MessageComponent = ({
                   key={emoji}
                   variant="ghost"
                   size="sm"
-                  onClick={() => onReaction(message.id, emoji)}
+                  onClick={() => {
+                    onReaction(message.id, emoji)
+                    setIsEmojiPickerOpen(false)
+                  }}
                 >
                   {emoji}
                 </Button>
