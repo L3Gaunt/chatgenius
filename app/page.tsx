@@ -10,33 +10,19 @@ export default function Home() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
 
   useEffect(() => {
-    const ensureGeneralChannel = async () => {
-      // Find the general channel ID
-      const { data: channels, error } = await supabase
+    const selectGeneralChannel = async () => {
+      const { data: generalChannel } = await supabase
         .from('channels')
         .select('id')
         .eq('name', 'general')
         .single()
 
-      if (error || !channels) {
-        // If general channel doesn't exist, create it
-        const { data: newChannel } = await supabase
-          .from('channels')
-          .insert([
-            { name: 'general', type: 'public' }
-          ])
-          .select('id')
-          .single()
-
-        if (newChannel) {
-          setSelectedChannelId(newChannel.id)
-        }
-      } else {
-        setSelectedChannelId(channels.id)
+      if (generalChannel) {
+        setSelectedChannelId(generalChannel.id)
       }
     }
 
-    ensureGeneralChannel()
+    selectGeneralChannel()
   }, [])
 
   const handleChannelSelect = (channelId: string) => {

@@ -26,11 +26,16 @@ CREATE TRIGGER profiles_updated_at
 -- 2) Channels table
 CREATE TABLE IF NOT EXISTS public.channels (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
-  name TEXT NOT NULL,
+  name TEXT UNIQUE NOT NULL,
   type TEXT NOT NULL DEFAULT 'public',     -- 'public', 'private', 'direct'
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Create the general channel by default
+INSERT INTO public.channels (name, type)
+VALUES ('general', 'public')
+ON CONFLICT (name) DO NOTHING;
 
 CREATE TRIGGER channels_updated_at
   BEFORE UPDATE ON public.channels
@@ -96,6 +101,16 @@ CREATE POLICY "Public channels are viewable by everyone"
     WHERE channel_users.channel_id = channels.id
     AND channel_users.user_id = auth.uid()
   ));
+
+-- Prevent deletion of the general channel
+CREATE POLICY "General channel cannot be deleted"
+  ON public.channels FOR DELETE
+  USING (name != 'general');
+
+-- Allow deletion of other channels
+CREATE POLICY "Users can delete non-general channels"
+  ON public.channels FOR DELETE
+  USING (name != 'general' AND type = 'public');
 
 -- Channel Users: Members can view their channel memberships
 ALTER TABLE public.channel_users ENABLE ROW LEVEL SECURITY;
