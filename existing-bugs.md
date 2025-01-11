@@ -6,3 +6,5 @@ TODO
 - forgot password functionality
 - UI: more distinct login vs. signup in auth form
 - need access control for files
+- database aggregation for reaction counts on server side
+- accesss control so people don't see who liked what

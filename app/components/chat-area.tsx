@@ -71,12 +71,15 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
         .from('messages')
         .select(`
           *,
-          user:profiles!messages_user_id_fkey (
+          user:profiles(
             id,
             username,
             status,
             updated_at,
             created_at
+          ),
+          reactions(
+            emoji
           )
         `)
         .eq('channel_id', channelId)
@@ -87,30 +90,17 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
         return
       }
 
-      // Fetch reactions for each message
-      const messagesWithReactions = await Promise.all(
-        messagesData.map(async (message) => {
-          const { data: reactions } = await supabase
-            .from('reactions')
-            .select('emoji')
-            .eq('message_id', message.id)
-
-          const reactionCounts = reactions?.reduce((acc, { emoji }) => {
-            acc[emoji] = (acc[emoji] || 0) + 1
+      const messagesWithFormattedReactions = messagesData.map(message => ({
+        ...message,
+        reactions: Object.entries(
+          message.reactions.reduce((acc: Record<string, number>, reaction: { emoji: string }) => {
+            acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1
             return acc
-          }, {} as Record<string, number>) || {}
+          }, {})
+        ).map(([emoji, count]) => ({ emoji, count }))
+      }))
 
-          return {
-            ...message,
-            reactions: Object.entries(reactionCounts).map(([emoji, count]) => ({
-              emoji,
-              count
-            }))
-          } as Message
-        })
-      )
-
-      setMessages(messagesWithReactions)
+      setMessages(messagesWithFormattedReactions)
       setLoading(false)
     }
 
@@ -200,7 +190,12 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
       })
 
     if (error) {
-      console.error('Error sending message:', error)
+      console.error('Error sending message:', {
+        error,
+        details: error.details,
+        message: error.message,
+        channelId
+      })
       return
     }
 
@@ -220,7 +215,13 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
       })
 
     if (error) {
-      console.error('Error adding reaction:', error)
+      console.error('Error adding reaction:', {
+        error,
+        details: error.details,
+        message: error.message,
+        messageId,
+        emoji
+      })
     }
   }
 
@@ -231,7 +232,12 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
       .eq('id', messageId)
 
     if (error) {
-      console.error('Error deleting message:', error)
+      console.error('Error deleting message:', {
+        error,
+        details: error.details,
+        message: error.message,
+        messageId
+      })
     }
   }
 

@@ -103,7 +103,12 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
       setChannels(channelsData)
       setDirectMessages(usersData)
     } catch (error) {
-      console.error('Error fetching data:', error)
+      console.error('Error fetching data:', {
+        error,
+        details: error.details,
+        message: error.message,
+        type: 'channels-and-users-query'
+      })
     } finally {
       setLoading(false)
     }
@@ -139,7 +144,12 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
 
       if (error) throw error
     } catch (error) {
-      console.error('Error creating channel:', error)
+      console.error('Error creating channel:', {
+        error,
+        details: error.details,
+        message: error.message,
+        channelName: channelName.toLowerCase()
+      })
     }
   }
 
@@ -165,7 +175,12 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
         }
       }
     } catch (error) {
-      console.error('Error deleting channel:', error)
+      console.error('Error deleting channel:', {
+        error,
+        details: error.details,
+        message: error.message,
+        channelId
+      })
     }
   }
 
