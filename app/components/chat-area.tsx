@@ -7,12 +7,13 @@ import { MessageComponent } from './message-component'
 import { ChatInput } from './chat-input'
 import { supabase } from '@/lib/supabase'
 import { Database } from '@/types/supabase'
-import { RealtimeChannel } from '@supabase/supabase-js'
+import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { User, Hash } from 'lucide-react'
 
 type DatabaseMessage = Database['public']['Tables']['messages']['Row']
 type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
 type Channel = Database['public']['Tables']['channels']['Row']
+type DatabaseReaction = Database['public']['Tables']['reactions']['Row']
 
 interface Message extends DatabaseMessage {
   user: DatabaseProfile;
@@ -135,6 +136,46 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
 
             setMessages(prev => [...prev, newMessage])
           }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'reactions'
+        },
+        async (payload: RealtimePostgresChangesPayload<{
+          new: DatabaseReaction | null;
+          old: DatabaseReaction | null;
+        }>) => {
+          const messageId = (payload.new || payload.old)?.message_id
+
+          if (!messageId) return
+
+          // Fetch updated reactions for the message
+          const { data: reactionsData } = await supabase
+            .from('reactions')
+            .select('emoji')
+            .eq('message_id', messageId)
+
+          // Update the message with new reactions
+          setMessages(prev => prev.map(message => {
+            if (message.id === messageId) {
+              const formattedReactions = Object.entries(
+                (reactionsData || []).reduce((acc: Record<string, number>, reaction: { emoji: string }) => {
+                  acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1
+                  return acc
+                }, {})
+              ).map(([emoji, count]) => ({ emoji, count }))
+
+              return {
+                ...message,
+                reactions: formattedReactions
+              }
+            }
+            return message
+          }))
         }
       )
       .subscribe()
