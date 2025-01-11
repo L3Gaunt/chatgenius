@@ -102,6 +102,11 @@ CREATE POLICY "Public channels are viewable by everyone"
     AND channel_users.user_id = auth.uid()
   ));
 
+-- Allow users to create channels
+CREATE POLICY "Users can create channels"
+  ON public.channels FOR INSERT
+  WITH CHECK (true);
+
 -- Prevent deletion of the general channel
 CREATE POLICY "General channel cannot be deleted"
   ON public.channels FOR DELETE
@@ -142,6 +147,11 @@ CREATE POLICY "Users can insert messages in their channels"
     channel_id IN (
       SELECT channel_id FROM public.channel_users
       WHERE user_id = auth.uid()
+    ) OR
+    EXISTS (
+      SELECT 1 FROM public.channels
+      WHERE channels.id = channel_id
+      AND channels.type = 'public'
     )
   );
 
