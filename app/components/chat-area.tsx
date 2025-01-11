@@ -207,15 +207,14 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
     if (!userData.user) return
 
     const { error } = await supabase
-      .from('reactions')
-      .insert({
-        message_id: messageId,
-        user_id: userData.user.id,
-        emoji
+      .rpc('toggle_reaction', {
+        message_id_param: messageId,
+        user_id_param: userData.user.id,
+        emoji_param: emoji
       })
 
     if (error) {
-      console.error('Error adding reaction:', {
+      console.error('Error toggling reaction:', {
         error,
         details: error.details,
         message: error.message,

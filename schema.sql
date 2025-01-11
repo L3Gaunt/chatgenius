@@ -203,3 +203,27 @@ GRANT USAGE ON SCHEMA public TO service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
+
+-- Create function to toggle reactions
+CREATE OR REPLACE FUNCTION toggle_reaction(
+  message_id_param UUID,
+  user_id_param UUID,
+  emoji_param TEXT
+) RETURNS void AS $$
+BEGIN
+  -- Try to delete the reaction first
+  DELETE FROM public.reactions
+  WHERE message_id = message_id_param
+    AND user_id = user_id_param
+    AND emoji = emoji_param;
+  
+  -- If no row was deleted (indicated by FOUND being false), insert the reaction
+  IF NOT FOUND THEN
+    INSERT INTO public.reactions(message_id, user_id, emoji)
+    VALUES (message_id_param, user_id_param, emoji_param);
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Grant execute permission on the function
+GRANT EXECUTE ON FUNCTION toggle_reaction TO authenticated;
