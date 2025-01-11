@@ -46,7 +46,7 @@ CREATE TRIGGER channels_updated_at
 CREATE TABLE IF NOT EXISTS public.channel_users (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   channel_id UUID NOT NULL REFERENCES public.channels (id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles (id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (channel_id, user_id)
 );
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS public.channel_users (
 CREATE TABLE IF NOT EXISTS public.messages (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   channel_id UUID NOT NULL REFERENCES public.channels (id) ON DELETE CASCADE,
-  user_id UUID REFERENCES auth.users (id) ON DELETE SET NULL,
+  user_id UUID REFERENCES public.profiles (id) ON DELETE SET NULL,
   parent_message_id UUID REFERENCES public.messages (id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   attachments JSONB DEFAULT '[]',  -- For storing file metadata directly
@@ -73,7 +73,7 @@ CREATE TRIGGER messages_updated_at
 CREATE TABLE IF NOT EXISTS public.reactions (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   message_id UUID NOT NULL REFERENCES public.messages (id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles (id) ON DELETE CASCADE,
   emoji TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (message_id, user_id, emoji)  -- each user can react with a specific emoji only once
@@ -186,4 +186,11 @@ CREATE POLICY "Users can add reactions to visible messages"
         WHERE type = 'public'
       )
     )
-  ); 
+  );
+
+-- Enable realtime for all tables
+ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
+ALTER PUBLICATION supabase_realtime ADD TABLE channels;
+ALTER PUBLICATION supabase_realtime ADD TABLE channel_users;
+ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+ALTER PUBLICATION supabase_realtime ADD TABLE reactions; 
