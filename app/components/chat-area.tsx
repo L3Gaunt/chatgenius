@@ -12,6 +12,7 @@ import { RealtimeChannel } from '@supabase/supabase-js'
 
 type DatabaseMessage = Database['public']['Tables']['messages']['Row']
 type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
+type Channel = Database['public']['Tables']['channels']['Row']
 
 interface Message extends DatabaseMessage {
   user: DatabaseProfile;
@@ -26,10 +27,31 @@ export function ChatArea() {
   const params = useParams()
   const channelId = params.channelId as string
   const [messages, setMessages] = useState<Message[]>([])
+  const [channel, setChannel] = useState<Channel | null>(null)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    // Fetch channel details
+    const fetchChannel = async () => {
+      const { data: channelData, error } = await supabase
+        .from('channels')
+        .select('*')
+        .eq('id', channelId)
+        .single()
+
+      if (error) {
+        console.error('Error fetching channel:', error)
+        return
+      }
+
+      setChannel(channelData)
+    }
+
+    fetchChannel()
+  }, [channelId])
 
   useEffect(() => {
     // Fetch initial messages
@@ -227,7 +249,12 @@ export function ChatArea() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <div className="p-4 border-b">
+      <div className="p-4 border-b flex justify-between items-center">
+        <div className="flex items-center">
+          <h2 className="text-xl font-semibold mr-4">
+            # {channel?.name || 'Loading...'}
+          </h2>
+        </div>
         <SearchBox onSearch={handleSearch} />
       </div>
       <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
