@@ -95,9 +95,23 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
           ),
           reactions(
             emoji
+          ),
+          replies:messages!parent_message_id(
+            *,
+            user:profiles(
+              id,
+              username,
+              status,
+              updated_at,
+              created_at
+            ),
+            reactions(
+              emoji
+            )
           )
         `)
         .eq('channel_id', channelId)
+        .is('parent_message_id', null) // Only fetch top-level messages
         .order('created_at', { ascending: true })
 
       if (error) {
@@ -105,18 +119,46 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
         return
       }
 
-      const messagesWithFormattedReactions = messagesData.map(message => ({
-        ...message,
-        reactions: Object.entries(
-          message.reactions.reduce((acc: Record<string, number>, reaction: { emoji: string }) => {
+      // Process messages to include reactions counts
+      const processedMessages = messagesData?.map((message: any) => {
+        const reactionCounts = message.reactions.reduce((acc: { [key: string]: number }, reaction: DatabaseReaction) => {
+          acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1
+          return acc
+        }, {})
+
+        const formattedReactions = Object.entries(reactionCounts).map(([emoji, count]) => ({
+          emoji,
+          count
+        }))
+
+        // Process replies if they exist
+        const processedReplies = message.replies?.map((reply: any) => {
+          const replyReactionCounts = reply.reactions.reduce((acc: { [key: string]: number }, reaction: DatabaseReaction) => {
             acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1
             return acc
           }, {})
-        ).map(([emoji, count]) => ({ emoji, count }))
-      }))
 
-      setMessages(messagesWithFormattedReactions)
+          const formattedReplyReactions = Object.entries(replyReactionCounts).map(([emoji, count]) => ({
+            emoji,
+            count
+          }))
+
+          return {
+            ...reply,
+            reactions: formattedReplyReactions
+          }
+        })
+
+        return {
+          ...message,
+          reactions: formattedReactions,
+          replies: processedReplies || []
+        }
+      }) || []
+
+      setMessages(processedMessages)
       setLoading(false)
+      scrollToBottom()
     }
 
     fetchMessages()
@@ -178,10 +220,40 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
 
             if (payload.eventType === 'INSERT') {
               console.log('Inserting new message:', newMessage)
-              setMessages(prev => [...prev, newMessage])
+              setMessages(prev => {
+                // If this is a reply (has parent_message_id), add it to the parent's replies
+                if (newMessage.parent_message_id) {
+                  return prev.map(msg => {
+                    if (msg.id === newMessage.parent_message_id) {
+                      return {
+                        ...msg,
+                        replies: [...(msg.replies || []), newMessage]
+                      }
+                    }
+                    return msg
+                  })
+                }
+                // If it's a top-level message, add it to the messages array
+                return [...prev, newMessage]
+              })
             } else if (payload.eventType === 'UPDATE') {
               console.log('Updating message:', newMessage)
-              setMessages(prev => prev.map(msg => msg.id === newMessage.id ? newMessage : msg))
+              setMessages(prev => prev.map(msg => {
+                // If this is the message being updated
+                if (msg.id === newMessage.id) {
+                  return newMessage
+                }
+                // If this message has the updated message as a reply
+                if (msg.replies?.some(reply => reply.id === newMessage.id)) {
+                  return {
+                    ...msg,
+                    replies: msg.replies.map(reply => 
+                      reply.id === newMessage.id ? newMessage : reply
+                    )
+                  }
+                }
+                return msg
+              }))
             }
           }
         }
@@ -224,6 +296,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
           // Update the message with new reactions
           setMessages(prev => {
             const updated = prev.map(message => {
+              // Check if this is the message that got the reaction
               if (message.id === messageId) {
                 const formattedReactions = Object.entries(
                   (reactionsData || []).reduce((acc: Record<string, number>, reaction: { emoji: string }) => {
@@ -237,6 +310,30 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
                   reactions: formattedReactions
                 }
               }
+
+              // Check if the reaction is for a reply
+              if (message.replies?.some(reply => reply.id === messageId)) {
+                return {
+                  ...message,
+                  replies: message.replies.map(reply => {
+                    if (reply.id === messageId) {
+                      const formattedReactions = Object.entries(
+                        (reactionsData || []).reduce((acc: Record<string, number>, reaction: { emoji: string }) => {
+                          acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1
+                          return acc
+                        }, {})
+                      ).map(([emoji, count]) => ({ emoji, count }))
+
+                      return {
+                        ...reply,
+                        reactions: formattedReactions
+                      }
+                    }
+                    return reply
+                  })
+                }
+              }
+
               return message
             })
             console.log('Updated messages state:', updated)
@@ -252,61 +349,68 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
   }, [channelId])
 
   const handleSendMessage = async (content: string, attachments: File[]) => {
-    if (!channelId) return
+    if (!channelId || !currentUserId) return
 
-    const { data: userData } = await supabase.auth.getUser()
-    if (!userData.user) return
-
-    // Upload attachments if any
-    const uploadedAttachments = await Promise.all(
-      attachments.map(async (file) => {
-        const fileExt = file.name.split('.').pop()
-        const fileName = `${Math.random()}.${fileExt}`
-        const filePath = `${channelId}/${fileName}`
-
-        const { data, error } = await supabase.storage
-          .from('attachments')
-          .upload(filePath, file)
-
-        if (error) {
-          console.error('Error uploading file:', error)
-          return null
-        }
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('attachments')
-          .getPublicUrl(filePath)
-
-        return {
-          id: fileName,
-          name: file.name,
-          url: publicUrl
-        }
-      })
-    )
-
-    // Insert message
-    const { error } = await supabase
-      .from('messages')
-      .insert({
+    try {
+      // Create the message object
+      const messageData = {
         channel_id: channelId,
-        user_id: userData.user.id,
+        user_id: currentUserId,
         content,
         parent_message_id: replyingTo?.id || null,
-        attachments: uploadedAttachments.filter(Boolean)
-      })
+        attachments: [] as { id: string; name: string; url: string; }[]
+      }
 
-    if (error) {
-      console.error('Error sending message:', {
-        error,
-        details: error.details,
-        message: error.message,
-        channelId
-      })
-      return
+      // Handle file uploads if any
+      if (attachments.length > 0) {
+        const uploadedAttachments = await Promise.all(
+          attachments.map(async (file) => {
+            const fileName = `${Date.now()}-${file.name}`
+            const { data, error } = await supabase.storage
+              .from('attachments')
+              .upload(`${channelId}/${fileName}`, file)
+
+            if (error) throw error
+
+            const { data: { publicUrl } } = supabase.storage
+              .from('attachments')
+              .getPublicUrl(`${channelId}/${fileName}`)
+
+            return {
+              id: data.path,
+              name: file.name,
+              url: publicUrl
+            }
+          })
+        )
+
+        messageData.attachments = uploadedAttachments
+      }
+
+      // Insert the message
+      const { data: message, error } = await supabase
+        .from('messages')
+        .insert(messageData)
+        .select(`
+          *,
+          user:profiles(
+            id,
+            username,
+            status,
+            updated_at,
+            created_at
+          )
+        `)
+        .single()
+
+      if (error) throw error
+
+      // Clear the replyingTo state after sending
+      setReplyingTo(null)
+
+    } catch (error) {
+      console.error('Error sending message:', error)
     }
-
-    setReplyingTo(null)
   }
 
   const handleReaction = async (messageId: string, emoji: string) => {

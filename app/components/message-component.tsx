@@ -78,7 +78,7 @@ export const MessageComponent = ({
           ))}
         </div>
       )}
-      <div className="mt-1 flex items-center">
+      <div className="mt-1 flex items-center space-x-2">
         {message.reactions.map(({ emoji, count }) => (
           <Button
             key={emoji}
@@ -96,8 +96,8 @@ export const MessageComponent = ({
               <Smile size={16} />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-1 bg-popover border border-border shadow-md">
-            <div className="flex">
+          <PopoverContent className="w-auto p-1">
+            <div className="flex gap-1">
               {emojis.map(emoji => (
                 <Button
                   key={emoji}
@@ -114,16 +114,22 @@ export const MessageComponent = ({
             </div>
           </PopoverContent>
         </Popover>
-        <Button variant="ghost" size="sm" onClick={() => onReply(message)}>
-          <MessageSquare size={16} />
-        </Button>
+        {!isReply && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onReply(message)}
+          >
+            <MessageSquare size={16} />
+          </Button>
+        )}
       </div>
       {message.replies && message.replies.length > 0 && (
         <div className="mt-2">
-          {message.replies.map(reply => (
-            <MessageComponent 
-              key={reply.id} 
-              message={reply} 
+          {message.replies.map((reply) => (
+            <MessageComponent
+              key={reply.id}
+              message={reply}
               isReply={true}
               currentUserId={currentUserId}
               onDelete={onDelete}
