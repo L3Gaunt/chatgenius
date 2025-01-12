@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { supabase } from '@/lib/supabase'
 import { FaGithub, FaGoogle } from 'react-icons/fa'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export function AuthForm() {
   const [email, setEmail] = useState('')
@@ -58,6 +59,12 @@ export function AuthForm() {
     }
   }
 
+  const handleForgotPassword = (e: React.MouseEvent) => {
+    console.log('Forgot password clicked')
+    // If the link doesn't work, we can try programmatic navigation
+    router.push('/auth/forgot-password')
+  }
+
   return (
     <div className="w-full max-w-md p-6 space-y-6 bg-white rounded-lg shadow-lg dark:bg-gray-800">
       <h2 className="text-2xl font-bold text-center text-gray-900 dark:text-white">
@@ -83,6 +90,17 @@ export function AuthForm() {
             required
           />
         </div>
+        {!isSignUp && (
+          <div className="text-right">
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+            >
+              Forgot password?
+            </button>
+          </div>
+        )}
         {error && (
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
         )}
@@ -106,7 +124,7 @@ export function AuthForm() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-3">
         <Button
           type="button"
           variant="outline"
