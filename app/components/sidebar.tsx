@@ -104,10 +104,11 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
 
   const fetchChannelsAndUsers = async () => {
     try {
-      // Fetch public channels and channels the user is a member of
+      // Fetch only public channels
       const { data: channelsData, error: channelsError } = await supabase
         .from('channels')
         .select('*')
+        .eq('type', 'public')
         .order('name')
 
       if (channelsError) throw channelsError
@@ -211,9 +212,68 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
     onChannelSelect?.(channelId)
   }
 
-  const handleDirectMessageSelect = (userId: string) => {
-    setSelectedChannelId(null)
-    onDirectMessageSelect?.(userId)
+  const handleDirectMessageSelect = async (userId: string) => {
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      // Create a consistent name pattern for DM channels
+      const dmChannelName = [user.id, userId].sort().join('_')
+
+      // Check if DM channel already exists between these users
+      const { data: existingChannel, error: fetchError } = await supabase
+        .from('channels')
+        .select('id')
+        .eq('type', 'direct')
+        .eq('name', dmChannelName)
+        .single()
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError
+      }
+
+      let channelId: string
+
+      if (existingChannel) {
+        channelId = existingChannel.id
+      } else {
+        // Create new DM channel
+        const { data: newChannel, error: createError } = await supabase
+          .from('channels')
+          .insert({
+            name: dmChannelName,
+            type: 'direct'
+          })
+          .select('id')
+          .single()
+
+        if (createError) throw createError
+        if (!newChannel) throw new Error('Failed to create DM channel')
+
+        channelId = newChannel.id
+
+        // Add both users to the channel
+        const { error: membersError } = await supabase
+          .from('channel_users')
+          .insert([
+            { channel_id: channelId, user_id: user.id },
+            { channel_id: channelId, user_id: userId }
+          ])
+
+        if (membersError) throw membersError
+      }
+
+      setSelectedChannelId(channelId)
+      onDirectMessageSelect?.(userId)
+    } catch (error: any) {
+      console.error('Error handling direct message:', {
+        error,
+        details: error.details,
+        message: error.message,
+        userId
+      })
+    }
   }
 
   const handleLogout = async () => {
