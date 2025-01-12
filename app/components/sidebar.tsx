@@ -1,10 +1,17 @@
 "use client"
 import { useEffect, useState } from 'react'
-import { Hash, ChevronDown, User, Plus, Trash2 } from 'lucide-react'
+import { Hash, ChevronDown, User, Plus, Trash2, LogOut } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog"
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/types/supabase'
+import { useRouter } from 'next/navigation'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 type Channel = Database['public']['Tables']['channels']['Row']
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -19,6 +26,7 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
   const [directMessages, setDirectMessages] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
+  const router = useRouter()
 
   useEffect(() => {
     fetchChannelsAndUsers()
@@ -102,7 +110,7 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
 
       setChannels(channelsData)
       setDirectMessages(usersData)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching data:', {
         error,
         details: error.details,
@@ -143,7 +151,7 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
         ])
 
       if (error) throw error
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating channel:', {
         error,
         details: error.details,
@@ -194,13 +202,46 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
     onDirectMessageSelect?.(userId)
   }
 
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+      router.refresh()
+    } catch (error: any) {
+      console.error('Error logging out:', {
+        error,
+        details: error.details,
+        message: error.message
+      })
+    }
+  }
+
   if (loading) {
     return <div className="w-64 bg-gray-800 text-white p-4">Loading...</div>
   }
 
   return (
     <div className="w-64 bg-gray-800 text-white p-4 flex flex-col">
-      <h1 className="text-xl font-bold mb-4">ChatGenius</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold">ChatGenius</h1>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleLogout}
+                className="hover:bg-gray-700"
+              >
+                <LogOut size={16} className="text-gray-400 hover:text-white" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Logout</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
       
       <div className="mb-4">
         <h2 className="flex items-center justify-between text-sm font-semibold mb-2">
