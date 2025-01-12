@@ -75,9 +75,15 @@ export const MessageComponent = ({
       )}
       <div className="mt-1 flex items-center">
         {message.reactions.map(({ emoji, count }) => (
-          <span key={emoji} className="mr-2 bg-gray-100 rounded-full px-2 py-1 text-sm">
+          <Button
+            key={emoji}
+            variant="ghost"
+            size="sm"
+            className="mr-2 bg-gray-100 rounded-full px-2 py-1 text-sm hover:bg-gray-200"
+            onClick={() => onReaction(message.id, emoji)}
+          >
             {emoji} {count}
-          </span>
+          </Button>
         ))}
         <Popover open={isEmojiPickerOpen} onOpenChange={setIsEmojiPickerOpen}>
           <PopoverTrigger asChild>
