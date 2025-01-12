@@ -8,6 +8,8 @@ necessary:
 - presence status
 - file upload
 
+- check for inconsistencies and duplicate definitions
+
 nice to have:
 - search over all channels
 - integrate auth with google+github
@@ -16,7 +18,7 @@ nice to have:
 - need access control for database
 - database aggregation for reaction counts on server side
 - people see who liked what
-- efficiency: Don't do linear search over messages to do modifications anymore in chat-area.tsx, but find the right message in a dict or similar
++ efficiency: Don't do linear search over messages to do modifications anymore in chat-area.tsx, but find the right message in a dict or similar <- that turned out to be not necessary as react does O(n) comparison after update anyway
 - efficiency: Check for the number of queries to fetch data
 - efficiency: When loading page, get initial messages/channels directly?? But that's hard I guess
 - "unread messages" notification in non-open channels.
