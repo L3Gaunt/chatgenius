@@ -231,3 +231,6 @@ $$ LANGUAGE plpgsql;
 
 -- Grant execute permission on the function
 GRANT EXECUTE ON FUNCTION toggle_reaction TO authenticated;
+
+ALTER TABLE public.reactions REPLICA IDENTITY FULL;
+ALTER TABLE public.messages REPLICA IDENTITY FULL;

@@ -1,10 +1,10 @@
 TODO
 - nested replies
-- after deleting a channel, the page should load another channel
+x after deleting a channel, the page should load another channel
 - integrate auth with google+github
 - need to be able to log out after login
 - forgot password functionality
 - UI: more distinct login vs. signup in auth form
-- need access control for files
+- need access control for database
 - database aggregation for reaction counts on server side
-- accesss control so people don't see who liked what
+- people see who liked what

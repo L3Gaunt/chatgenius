@@ -14,6 +14,8 @@ type DatabaseMessage = Database['public']['Tables']['messages']['Row']
 type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
 type Channel = Database['public']['Tables']['channels']['Row']
 type DatabaseReaction = Database['public']['Tables']['reactions']['Row']
+type MessageRow = Database['public']['Tables']['messages']['Row']
+type ReactionRow = Database['public']['Tables']['reactions']['Row']
 
 interface Message extends DatabaseMessage {
   user: DatabaseProfile;
@@ -126,27 +128,61 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'messages',
           filter: `channel_id=eq.${channelId}`
         },
-        async (payload) => {
-          const { data: userData } = await supabase
+        async (payload: RealtimePostgresChangesPayload<MessageRow>) => {
+          console.log('Message event received:', payload.eventType, payload)
+
+          if (payload.eventType === 'DELETE' && payload.old?.id) {
+            console.log('Deleting message:', payload.old.id)
+            setMessages(prev => prev.filter(msg => msg.id !== payload.old?.id))
+            return
+          }
+
+          const messageData = payload.new as MessageRow
+          if (!messageData || !messageData.user_id) {
+            console.log('No valid message data in payload')
+            return
+          }
+
+          // For INSERT and UPDATE events
+          const { data: userData, error: userError } = await supabase
             .from('profiles')
             .select('id, username, status, updated_at, created_at')
-            .eq('id', payload.new.user_id)
+            .eq('id', messageData.user_id)
             .single()
+
+          if (userError) {
+            console.error('Error fetching user data:', userError)
+            return
+          }
 
           if (userData) {
             const newMessage: Message = {
-              ...payload.new as DatabaseMessage,
+              id: messageData.id,
+              channel_id: messageData.channel_id,
+              user_id: messageData.user_id,
+              parent_message_id: messageData.parent_message_id,
+              content: messageData.content,
+              attachments: messageData.attachments,
+              timestamp: messageData.timestamp,
+              created_at: messageData.created_at,
+              updated_at: messageData.updated_at,
               user: userData,
               reactions: [],
               replies: []
             }
 
-            setMessages(prev => [...prev, newMessage])
+            if (payload.eventType === 'INSERT') {
+              console.log('Inserting new message:', newMessage)
+              setMessages(prev => [...prev, newMessage])
+            } else if (payload.eventType === 'UPDATE') {
+              console.log('Updating message:', newMessage)
+              setMessages(prev => prev.map(msg => msg.id === newMessage.id ? newMessage : msg))
+            }
           }
         }
       )
@@ -157,34 +193,55 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
           schema: 'public',
           table: 'reactions'
         },
-        async (payload: RealtimePostgresChangesPayload<DatabaseReaction>) => {
-          const messageId = payload.new?.message_id || payload.old?.message_id
+        async (payload: RealtimePostgresChangesPayload<ReactionRow>) => {
+          console.log('Reaction event received:', payload.eventType, payload)
+          
+          let messageId: string | undefined
+          if (payload.eventType === 'DELETE') {
+            messageId = (payload.old as ReactionRow)?.message_id
+          } else {
+            messageId = (payload.new as ReactionRow)?.message_id
+          }
 
-          if (!messageId) return
+          if (!messageId) {
+            console.log('No message ID found in payload')
+            return
+          }
 
+          console.log('Fetching updated reactions for message:', messageId)
           // Fetch updated reactions for the message
-          const { data: reactionsData } = await supabase
+          const { data: reactionsData, error: reactionsError } = await supabase
             .from('reactions')
             .select('emoji')
             .eq('message_id', messageId)
 
-          // Update the message with new reactions
-          setMessages(prev => prev.map(message => {
-            if (message.id === messageId) {
-              const formattedReactions = Object.entries(
-                (reactionsData || []).reduce((acc: Record<string, number>, reaction: { emoji: string }) => {
-                  acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1
-                  return acc
-                }, {})
-              ).map(([emoji, count]) => ({ emoji, count }))
+          if (reactionsError) {
+            console.error('Error fetching reactions:', reactionsError)
+            return
+          }
 
-              return {
-                ...message,
-                reactions: formattedReactions
+          console.log('Received reactions data:', reactionsData)
+          // Update the message with new reactions
+          setMessages(prev => {
+            const updated = prev.map(message => {
+              if (message.id === messageId) {
+                const formattedReactions = Object.entries(
+                  (reactionsData || []).reduce((acc: Record<string, number>, reaction: { emoji: string }) => {
+                    acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1
+                    return acc
+                  }, {})
+                ).map(([emoji, count]) => ({ emoji, count }))
+
+                return {
+                  ...message,
+                  reactions: formattedReactions
+                }
               }
-            }
-            return message
-          }))
+              return message
+            })
+            console.log('Updated messages state:', updated)
+            return updated
+          })
         }
       )
       .subscribe()
