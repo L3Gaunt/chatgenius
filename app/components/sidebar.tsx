@@ -4,7 +4,7 @@ import { Hash, ChevronDown, User, Plus, Trash2, LogOut } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog"
 import { supabase } from '@/lib/supabase'
-import type { Database } from '@/types/supabase'
+import type { Database, Profile } from '@/types/supabase'
 import { useRouter } from 'next/navigation'
 import {
   Tooltip,
@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/tooltip"
 
 type Channel = Database['public']['Tables']['channels']['Row']
-type Profile = Database['public']['Tables']['profiles']['Row']
 
 interface SidebarProps {
   onChannelSelect?: (channelId: string) => void;
@@ -27,6 +26,7 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
   const [loading, setLoading] = useState(true)
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
   const router = useRouter()
+  const [onlineUsers, setOnlineUsers] = useState<Record<string, any>>({})
 
   useEffect(() => {
     fetchChannelsAndUsers()
@@ -88,6 +88,20 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
     }
   }, [channels, selectedChannelId])
 
+  useEffect(() => {
+    // Subscribe to presence channel for online status
+    const channel = supabase.channel('online-users')
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState()
+        setOnlineUsers(state)
+      })
+      .subscribe()
+
+    return () => {
+      channel.unsubscribe()
+    }
+  }, [])
+
   const fetchChannelsAndUsers = async () => {
     try {
       // Fetch public channels and channels the user is a member of
@@ -102,7 +116,7 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
       const { data: { user } } = await supabase.auth.getUser()
       const { data: usersData, error: usersError } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, username, created_at, updated_at')
         .neq('id', user?.id)
         .order('username')
 
@@ -182,11 +196,11 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
           handleChannelSelect(generalChannel.id)
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting channel:', {
-        error,
-        details: error.details,
-        message: error.message,
+        error: error.toString(),
+        details: error.details || 'No details available',
+        message: error.message || 'No message available',
         channelId
       })
     }
@@ -283,27 +297,31 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
         </ul>
       </div>
 
-      <div>
+      <div className="flex-1">
         <h2 className="flex items-center justify-between text-sm font-semibold mb-2">
           Direct Messages <ChevronDown size={16} />
         </h2>
         <ul>
-          {directMessages.map((user) => (
-            <li 
-              key={user.id} 
-              className="flex items-center mb-1 cursor-pointer hover:bg-gray-700 p-1 rounded"
-              onClick={() => handleDirectMessageSelect(user.id)}
-            >
-              <div className="relative mr-2">
-                <User size={16} />
-                <div className={`absolute bottom-0 right-0 w-2 h-2 rounded-full ${
-                  user.status === 'online' ? 'bg-green-500' :
-                  user.status === 'away' ? 'bg-yellow-500' : 'bg-gray-500'
-                }`}></div>
-              </div>
-              {user.username}
-            </li>
-          ))}
+          {directMessages.map((user) => {
+            const isOnline = Object.values(onlineUsers).some((presence: any) => 
+              presence.some((p: any) => p.userId === user.id)
+            );
+            return (
+              <li 
+                key={user.id} 
+                className="flex items-center mb-1 cursor-pointer hover:bg-gray-700 p-1 rounded"
+                onClick={() => handleDirectMessageSelect(user.id)}
+              >
+                <div className="relative mr-2">
+                  <User size={16} />
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ${
+                    isOnline ? 'bg-green-500' : 'bg-gray-500'
+                  }`}></div>
+                </div>
+                {user.username}
+              </li>
+            );
+          })}
         </ul>
       </div>
     </div>

@@ -89,31 +89,23 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
           user:profiles(
             id,
             username,
-            status,
-            updated_at,
-            created_at
+            created_at,
+            updated_at
           ),
-          reactions(
-            emoji,
-            user_id
-          ),
+          reactions(emoji, user_id),
           replies:messages!parent_message_id(
             *,
             user:profiles(
               id,
               username,
-              status,
-              updated_at,
-              created_at
+              created_at,
+              updated_at
             ),
-            reactions(
-              emoji,
-              user_id
-            )
+            reactions(emoji, user_id)
           )
         `)
         .eq('channel_id', channelId)
-        .is('parent_message_id', null) // Only fetch top-level messages
+        .is('parent_message_id', null)
         .order('created_at', { ascending: true })
 
       if (error) {
@@ -123,8 +115,11 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
 
       // Process messages to include reactions counts
       const processedMessages = messagesData?.map((message: any) => {
+        // Ensure reactions is initialized as an array
+        const messageReactions = message.reactions || [];
+
         // Group reactions by emoji and collect user IDs
-        const reactionsByEmoji = message.reactions.reduce((acc: { [key: string]: { count: number, users: string[] } }, reaction: DatabaseReaction) => {
+        const reactionsByEmoji = messageReactions.reduce((acc: { [key: string]: { count: number, users: string[] } }, reaction: DatabaseReaction) => {
           if (!acc[reaction.emoji]) {
             acc[reaction.emoji] = { count: 0, users: [] };
           }
@@ -207,7 +202,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
           // For INSERT and UPDATE events
           const { data: userData, error: userError } = await supabase
             .from('profiles')
-            .select('id, username, status, updated_at, created_at')
+            .select('id, username, created_at, updated_at')
             .eq('id', messageData.user_id)
             .single()
 
@@ -223,7 +218,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
               user_id: messageData.user_id,
               parent_message_id: messageData.parent_message_id,
               content: messageData.content,
-              attachments: messageData.attachments,
+              attachments: messageData.attachments || [],
               timestamp: messageData.timestamp,
               created_at: messageData.created_at,
               updated_at: messageData.updated_at,
@@ -426,9 +421,9 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
           user:profiles(
             id,
             username,
-            status,
-            updated_at,
-            created_at
+            avatar_url,
+            created_at,
+            updated_at
           )
         `)
         .single()

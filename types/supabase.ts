@@ -13,21 +13,18 @@ export interface Database {
         Row: {
           id: string
           username: string
-          status: 'online' | 'offline' | 'away'
           updated_at: string
           created_at: string
         }
         Insert: {
           id: string
           username: string
-          status?: 'online' | 'offline' | 'away'
           updated_at?: string
           created_at?: string
         }
         Update: {
           id?: string
           username?: string
-          status?: 'online' | 'offline' | 'away'
           updated_at?: string
           created_at?: string
         }
@@ -135,4 +132,11 @@ export interface Database {
       }
     }
   }
+}
+
+export type Profile = {
+  id: string
+  username: string
+  created_at: string
+  updated_at: string
 } 
