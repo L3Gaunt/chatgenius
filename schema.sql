@@ -155,6 +155,10 @@ CREATE POLICY "Users can insert messages in their channels"
     )
   );
 
+CREATE POLICY "Users can only delete their own messages"
+  ON public.messages FOR DELETE
+  USING (user_id = auth.uid());
+
 -- Reactions: Users can view and add reactions to messages they can see
 ALTER TABLE public.reactions ENABLE ROW LEVEL SECURITY;
 

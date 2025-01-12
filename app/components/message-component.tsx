@@ -24,6 +24,7 @@ interface Message extends DatabaseMessage {
 interface MessageComponentProps {
   message: Message;
   isReply?: boolean;
+  currentUserId: string;
   onDelete: (messageId: string) => void;
   onReaction: (messageId: string, emoji: string) => void;
   onReply: (message: Message) => void;
@@ -32,12 +33,14 @@ interface MessageComponentProps {
 export const MessageComponent = ({ 
   message, 
   isReply = false,
+  currentUserId,
   onDelete,
   onReaction,
   onReply
 }: MessageComponentProps) => {
   const attachments = message.attachments as { id: string; name: string; url: string; }[] || []
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = React.useState(false)
+  const canDelete = message.user_id === currentUserId
   
   return (
     <div className={`mb-4 ${isReply ? 'ml-6 border-l-2 border-gray-200 pl-4' : ''}`}>
@@ -50,16 +53,18 @@ export const MessageComponent = ({
           }`}></div>
           <span className="text-xs text-gray-500 ml-2">{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
-        <DeleteConfirmationDialog
-          trigger={
-            <Button variant="ghost" size="sm">
-              <Trash2 size={16} className="text-red-500" />
-            </Button>
-          }
-          title="Are you sure you want to delete this message?"
-          description="This action cannot be undone. This will permanently delete your message."
-          onDelete={() => onDelete(message.id)}
-        />
+        {canDelete && (
+          <DeleteConfirmationDialog
+            trigger={
+              <Button variant="ghost" size="sm">
+                <Trash2 size={16} className="text-red-500" />
+              </Button>
+            }
+            title="Are you sure you want to delete this message?"
+            description="This action cannot be undone. This will permanently delete your message."
+            onDelete={() => onDelete(message.id)}
+          />
+        )}
       </div>
       <p>{message.content}</p>
       {attachments.length > 0 && (
@@ -120,6 +125,7 @@ export const MessageComponent = ({
               key={reply.id} 
               message={reply} 
               isReply={true}
+              currentUserId={currentUserId}
               onDelete={onDelete}
               onReaction={onReaction}
               onReply={onReply}

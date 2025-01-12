@@ -34,9 +34,21 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
   const [channel, setChannel] = useState<Channel | null>(null)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [currentUserId, setCurrentUserId] = useState<string>('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
+
+  // Add effect to get current user
+  useEffect(() => {
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setCurrentUserId(user.id)
+      }
+    }
+    getCurrentUser()
+  }, [])
 
   useEffect(() => {
     if (!channelId) return
@@ -145,11 +157,8 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
           schema: 'public',
           table: 'reactions'
         },
-        async (payload: RealtimePostgresChangesPayload<{
-          new: DatabaseReaction | null;
-          old: DatabaseReaction | null;
-        }>) => {
-          const messageId = (payload.new || payload.old)?.message_id
+        async (payload: RealtimePostgresChangesPayload<DatabaseReaction>) => {
+          const messageId = payload.new?.message_id || payload.old?.message_id
 
           if (!messageId) return
 
@@ -348,6 +357,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
           <MessageComponent 
             key={message.id} 
             message={message}
+            currentUserId={currentUserId}
             onDelete={handleDeleteMessage}
             onReaction={handleReaction}
             onReply={setReplyingTo}
