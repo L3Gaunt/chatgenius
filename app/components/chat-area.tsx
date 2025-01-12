@@ -94,7 +94,8 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
             created_at
           ),
           reactions(
-            emoji
+            emoji,
+            user_id
           ),
           replies:messages!parent_message_id(
             *,
@@ -106,7 +107,8 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
               created_at
             ),
             reactions(
-              emoji
+              emoji,
+              user_id
             )
           )
         `)
@@ -121,40 +123,52 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
 
       // Process messages to include reactions counts
       const processedMessages = messagesData?.map((message: any) => {
-        const reactionCounts = message.reactions.reduce((acc: { [key: string]: number }, reaction: DatabaseReaction) => {
-          acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1
-          return acc
-        }, {})
+        // Group reactions by emoji and collect user IDs
+        const reactionsByEmoji = message.reactions.reduce((acc: { [key: string]: { count: number, users: string[] } }, reaction: DatabaseReaction) => {
+          if (!acc[reaction.emoji]) {
+            acc[reaction.emoji] = { count: 0, users: [] };
+          }
+          acc[reaction.emoji].count += 1;
+          acc[reaction.emoji].users.push(reaction.user_id);
+          return acc;
+        }, {});
 
-        const formattedReactions = Object.entries(reactionCounts).map(([emoji, count]) => ({
+        const formattedReactions = Object.entries(reactionsByEmoji).map(([emoji, data]) => ({
           emoji,
-          count
-        }))
+          count: (data as { count: number, users: string[] }).count,
+          users: (data as { count: number, users: string[] }).users
+        }));
 
         // Process replies if they exist
         const processedReplies = message.replies?.map((reply: any) => {
-          const replyReactionCounts = reply.reactions.reduce((acc: { [key: string]: number }, reaction: DatabaseReaction) => {
-            acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1
-            return acc
-          }, {})
+          // Group reactions by emoji and collect user IDs for replies
+          const replyReactionsByEmoji = reply.reactions.reduce((acc: { [key: string]: { count: number, users: string[] } }, reaction: DatabaseReaction) => {
+            if (!acc[reaction.emoji]) {
+              acc[reaction.emoji] = { count: 0, users: [] };
+            }
+            acc[reaction.emoji].count += 1;
+            acc[reaction.emoji].users.push(reaction.user_id);
+            return acc;
+          }, {});
 
-          const formattedReplyReactions = Object.entries(replyReactionCounts).map(([emoji, count]) => ({
+          const formattedReplyReactions = Object.entries(replyReactionsByEmoji).map(([emoji, data]) => ({
             emoji,
-            count
-          }))
+            count: (data as { count: number, users: string[] }).count,
+            users: (data as { count: number, users: string[] }).users
+          }));
 
           return {
             ...reply,
             reactions: formattedReplyReactions
-          }
-        })
+          };
+        });
 
         return {
           ...message,
           reactions: formattedReactions,
           replies: processedReplies || []
-        }
-      }) || []
+        };
+      }) || [];
 
       setMessages(processedMessages)
       setLoading(false)
@@ -284,7 +298,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
           // Fetch updated reactions for the message
           const { data: reactionsData, error: reactionsError } = await supabase
             .from('reactions')
-            .select('emoji')
+            .select('emoji, user_id')
             .eq('message_id', messageId)
 
           if (reactionsError) {
@@ -298,12 +312,20 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
             const updated = prev.map(message => {
               // Check if this is the message that got the reaction
               if (message.id === messageId) {
-                const formattedReactions = Object.entries(
-                  (reactionsData || []).reduce((acc: Record<string, number>, reaction: { emoji: string }) => {
-                    acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1
-                    return acc
-                  }, {})
-                ).map(([emoji, count]) => ({ emoji, count }))
+                const reactionsByEmoji = (reactionsData || []).reduce((acc: { [key: string]: { count: number, users: string[] } }, reaction: { emoji: string, user_id: string }) => {
+                  if (!acc[reaction.emoji]) {
+                    acc[reaction.emoji] = { count: 0, users: [] };
+                  }
+                  acc[reaction.emoji].count += 1;
+                  acc[reaction.emoji].users.push(reaction.user_id);
+                  return acc;
+                }, {});
+
+                const formattedReactions = Object.entries(reactionsByEmoji).map(([emoji, data]) => ({
+                  emoji,
+                  count: data.count,
+                  users: data.users
+                }));
 
                 return {
                   ...message,
@@ -317,12 +339,20 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
                   ...message,
                   replies: message.replies.map(reply => {
                     if (reply.id === messageId) {
-                      const formattedReactions = Object.entries(
-                        (reactionsData || []).reduce((acc: Record<string, number>, reaction: { emoji: string }) => {
-                          acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1
-                          return acc
-                        }, {})
-                      ).map(([emoji, count]) => ({ emoji, count }))
+                      const reactionsByEmoji = (reactionsData || []).reduce((acc: { [key: string]: { count: number, users: string[] } }, reaction: { emoji: string, user_id: string }) => {
+                        if (!acc[reaction.emoji]) {
+                          acc[reaction.emoji] = { count: 0, users: [] };
+                        }
+                        acc[reaction.emoji].count += 1;
+                        acc[reaction.emoji].users.push(reaction.user_id);
+                        return acc;
+                      }, {});
+
+                      const formattedReactions = Object.entries(reactionsByEmoji).map(([emoji, data]) => ({
+                        emoji,
+                        count: data.count,
+                        users: data.users
+                      }));
 
                       return {
                         ...reply,

@@ -11,12 +11,14 @@ const emojis = ['👍', '❤️', '😂', '🎉', '🤔', '👀']
 
 type DatabaseMessage = Database['public']['Tables']['messages']['Row']
 type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
+type DatabaseReaction = Database['public']['Tables']['reactions']['Row']
 
 interface Message extends DatabaseMessage {
   user: DatabaseProfile;
   reactions: {
     emoji: string;
     count: number;
+    users?: string[];  // Add users who reacted
   }[];
   replies?: Message[];
 }
@@ -79,17 +81,24 @@ export const MessageComponent = ({
         </div>
       )}
       <div className="mt-1 flex items-center space-x-2">
-        {message.reactions.map(({ emoji, count }) => (
-          <Button
-            key={emoji}
-            variant="ghost"
-            size="sm"
-            className="mr-2 bg-gray-100 rounded-full px-2 py-1 text-sm hover:bg-gray-200"
-            onClick={() => onReaction(message.id, emoji)}
-          >
-            {emoji} {count}
-          </Button>
-        ))}
+        {message.reactions.map(({ emoji, count, users = [] }) => {
+          const hasReacted = users.includes(currentUserId)
+          return (
+            <Button
+              key={emoji}
+              variant="ghost"
+              size="sm"
+              className={`mr-2 rounded-full px-2 py-1 text-sm transition-all ${
+                hasReacted 
+                  ? 'bg-blue-100 hover:bg-blue-200 border-2 border-blue-400 shadow-sm' 
+                  : 'bg-gray-100 hover:bg-gray-200'
+              }`}
+              onClick={() => onReaction(message.id, emoji)}
+            >
+              {emoji} {count}
+            </Button>
+          )
+        })}
         <Popover open={isEmojiPickerOpen} onOpenChange={setIsEmojiPickerOpen}>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="sm">
