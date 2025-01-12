@@ -4,7 +4,7 @@ necessary:
 + after deleting a channel, the page should load another channel
 + need to be able to log out after login
 + forgot password functionality
-- direct message functionality
++ direct message functionality
 - presence status
 - file upload
 

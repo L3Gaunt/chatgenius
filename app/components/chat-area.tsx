@@ -33,6 +33,7 @@ interface ChatAreaProps {
 
 export function ChatArea({ channelId, userId }: ChatAreaProps) {
   const [messages, setMessages] = useState<Message[]>([])
+  const [messagesById, setMessagesById] = useState<{[key: string]: Message}>({})
   const [channel, setChannel] = useState<Channel | null>(null)
   const [dmUser, setDmUser] = useState<DatabaseProfile | null>(null)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
@@ -181,20 +182,34 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
             users: (data as { count: number, users: string[] }).users
           }));
 
-          return {
+          const processedReply = {
             ...reply,
             reactions: formattedReplyReactions
           };
+          return processedReply;
         });
 
-        return {
+        const processedMessage = {
           ...message,
           reactions: formattedReactions,
           replies: processedReplies || []
         };
+        return processedMessage;
       }) || [];
 
+      // Create messages map
+      const messagesMap: {[key: string]: Message} = {};
+      processedMessages.forEach((msg: Message) => {
+        messagesMap[msg.id] = msg;
+        if (msg.replies) {
+          msg.replies.forEach((reply) => {
+            messagesMap[reply.id] = reply;
+          });
+        }
+      });
+
       setMessages(processedMessages)
+      setMessagesById(messagesMap)
       setLoading(false)
       scrollToBottom()
     }
@@ -316,24 +331,35 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
                   // If it's a top-level message, add it to the messages array
                   return [...prev, newMessage]
                 })
+                setMessagesById(prev => {
+                  const newMap = { ...prev };
+                  newMap[newMessage.id] = newMessage;
+                  return newMap;
+                });
               } else if (payload.eventType === 'UPDATE') {
                 console.log('Updating message:', newMessage)
-                setMessages(prev => prev.map(msg => {
-                  // If this is the message being updated
-                  if (msg.id === newMessage.id) {
-                    return newMessage
-                  }
-                  // If this message has the updated message as a reply
-                  if (msg.replies?.some(reply => reply.id === newMessage.id)) {
-                    return {
-                      ...msg,
-                      replies: msg.replies.map(reply => 
-                        reply.id === newMessage.id ? newMessage : reply
-                      )
+                setMessagesById(prev => {
+                  const newMap = { ...prev };
+                  newMap[newMessage.id] = newMessage;
+                  return newMap;
+                });
+                setMessages(prev => {
+                  const newMessages = prev.map(msg => {
+                    if (msg.id === newMessage.id) {
+                      return newMessage;
                     }
-                  }
-                  return msg
-                }))
+                    if (msg.replies?.some(reply => reply.id === newMessage.id)) {
+                      return {
+                        ...msg,
+                        replies: msg.replies.map(reply => 
+                          reply.id === newMessage.id ? newMessage : reply
+                        )
+                      };
+                    }
+                    return msg;
+                  });
+                  return newMessages;
+                });
               }
             }
           }
@@ -374,9 +400,36 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
 
             console.log('Received reactions data:', reactionsData)
             // Update the message with new reactions
+            setMessagesById(prev => {
+              const newMap = { ...prev };
+              const targetMsg = newMap[messageId];
+              if (targetMsg) {
+                const reactionsByEmoji = (reactionsData || []).reduce((acc: { [key: string]: { count: number, users: string[] } }, reaction: { emoji: string, user_id: string }) => {
+                  if (!acc[reaction.emoji]) {
+                    acc[reaction.emoji] = { count: 0, users: [] };
+                  }
+                  acc[reaction.emoji].count += 1;
+                  acc[reaction.emoji].users.push(reaction.user_id);
+                  return acc;
+                }, {});
+
+                const formattedReactions = Object.entries(reactionsByEmoji).map(([emoji, data]) => ({
+                  emoji,
+                  count: data.count,
+                  users: data.users
+                }));
+
+                newMap[messageId] = {
+                  ...targetMsg,
+                  reactions: formattedReactions
+                };
+              }
+              return newMap;
+            });
+
             setMessages(prev => {
-              const updated = prev.map(message => {
-                // Check if this is the message that got the reaction
+              const newMessages = prev.map(message => {
+                // If this is the message that got the reaction
                 if (message.id === messageId) {
                   const reactionsByEmoji = (reactionsData || []).reduce((acc: { [key: string]: { count: number, users: string[] } }, reaction: { emoji: string, user_id: string }) => {
                     if (!acc[reaction.emoji]) {
@@ -396,10 +449,10 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
                   return {
                     ...message,
                     reactions: formattedReactions
-                  }
+                  };
                 }
 
-                // Check if the reaction is for a reply
+                // If this message has the updated message as a reply
                 if (message.replies?.some(reply => reply.id === messageId)) {
                   return {
                     ...message,
@@ -423,18 +476,17 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
                         return {
                           ...reply,
                           reactions: formattedReactions
-                        }
+                        };
                       }
-                      return reply
+                      return reply;
                     })
-                  }
+                  };
                 }
 
-                return message
-              })
-              console.log('Updated messages state:', updated)
-              return updated
-            })
+                return message;
+              });
+              return newMessages;
+            });
           }
         )
         .subscribe()
