@@ -49,10 +49,6 @@ export const MessageComponent = ({
       <div className="flex items-baseline justify-between">
         <div className="flex items-center">
           <span className="font-bold mr-2">{message.user.username}</span>
-          <div className={`w-2 h-2 rounded-full ${
-            message.user.status === 'online' ? 'bg-green-500' :
-            message.user.status === 'away' ? 'bg-yellow-500' : 'bg-gray-500'
-          }`}></div>
           <span className="text-xs text-gray-500 ml-2">{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
         {canDelete && (

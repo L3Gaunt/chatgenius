@@ -26,7 +26,6 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
   const [loading, setLoading] = useState(true)
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
   const router = useRouter()
-  const [onlineUsers, setOnlineUsers] = useState<Record<string, any>>({})
 
   useEffect(() => {
     fetchChannelsAndUsers()
@@ -87,20 +86,6 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
       selectDefaultChannel()
     }
   }, [channels, selectedChannelId])
-
-  useEffect(() => {
-    // Subscribe to presence channel for online status
-    const channel = supabase.channel('online-users')
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState()
-        setOnlineUsers(state)
-      })
-      .subscribe()
-
-    return () => {
-      channel.unsubscribe()
-    }
-  }, [])
 
   const fetchChannelsAndUsers = async () => {
     try {
@@ -362,26 +347,16 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
           Direct Messages <ChevronDown size={16} />
         </h2>
         <ul>
-          {directMessages.map((user) => {
-            const isOnline = Object.values(onlineUsers).some((presence: any) => 
-              presence.some((p: any) => p.userId === user.id)
-            );
-            return (
-              <li 
-                key={user.id} 
-                className="flex items-center mb-1 cursor-pointer hover:bg-gray-700 p-1 rounded"
-                onClick={() => handleDirectMessageSelect(user.id)}
-              >
-                <div className="relative mr-2">
-                  <User size={16} />
-                  <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ${
-                    isOnline ? 'bg-green-500' : 'bg-gray-500'
-                  }`}></div>
-                </div>
-                {user.username}
-              </li>
-            );
-          })}
+          {directMessages.map((user) => (
+            <li 
+              key={user.id} 
+              className="flex items-center mb-1 cursor-pointer hover:bg-gray-700 p-1 rounded"
+              onClick={() => handleDirectMessageSelect(user.id)}
+            >
+              <User size={16} className="mr-2" />
+              {user.username}
+            </li>
+          ))}
         </ul>
       </div>
     </div>
