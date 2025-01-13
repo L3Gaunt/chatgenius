@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { supabase } from '@/lib/supabase'
-import { FaGithub, FaGoogle } from 'react-icons/fa'
+import { FaGithub } from 'react-icons/fa'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -45,7 +45,7 @@ export function AuthForm() {
     }
   }
 
-  const handleSocialLogin = async (provider: 'github' | 'google') => {
+  const handleSocialLogin = async (provider: 'github') => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
@@ -124,7 +124,7 @@ export function AuthForm() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <Button
           type="button"
           variant="outline"
@@ -132,14 +132,6 @@ export function AuthForm() {
         >
           <FaGithub className="mr-2" />
           GitHub
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => handleSocialLogin('google')}
-        >
-          <FaGoogle className="mr-2" />
-          Google
         </Button>
       </div>
 
