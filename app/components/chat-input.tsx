@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FileAttachment } from './file-attachment'
 import { Database } from '@/types/supabase'
-import { Message } from "../types/message";
+import { Message } from "../types/message"
+import { toast } from 'sonner'
 
 type DatabaseMessage = Database['public']['Tables']['messages']['Row']
 type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
+
+const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
 
 interface ChatInputProps {
   onSendMessage: (content: string, attachments: File[]) => void;
@@ -20,20 +23,41 @@ interface ChatInputProps {
 export function ChatInput({ onSendMessage, replyingTo, onCancelReply }: ChatInputProps) {
   const [newMessage, setNewMessage] = useState<string>('')
   const [attachments, setAttachments] = useState<File[]>([])
+  const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const validateFile = (file: File): boolean => {
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error(`File ${file.name} is too large. Maximum size is 20MB.`)
+      return false
+    }
+    return true
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (newMessage.trim() || attachments.length > 0) {
-      onSendMessage(newMessage, attachments)
-      setNewMessage('')
-      setAttachments([])
+    if ((newMessage.trim() || attachments.length > 0) && !isUploading) {
+      setIsUploading(true)
+      try {
+        await onSendMessage(newMessage, attachments)
+        setNewMessage('')
+        setAttachments([])
+      } catch (error) {
+        toast.error('Failed to send message. Please try again.')
+      } finally {
+        setIsUploading(false)
+      }
     }
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setAttachments([...attachments, ...Array.from(e.target.files)])
+      const validFiles = Array.from(e.target.files).filter(validateFile)
+      setAttachments(prev => [...prev, ...validFiles])
+    }
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
   }
 
@@ -84,6 +108,7 @@ export function ChatInput({ onSendMessage, replyingTo, onCancelReply }: ChatInpu
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             className="flex-1 mr-2"
+            disabled={isUploading}
           />
           <input
             type="file"
@@ -92,11 +117,16 @@ export function ChatInput({ onSendMessage, replyingTo, onCancelReply }: ChatInpu
             className="hidden"
             multiple
           />
-          <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+          >
             <Paperclip size={16} />
           </Button>
-          <Button type="submit" className="ml-2">
-            <Send size={16} className="mr-2" /> Send
+          <Button type="submit" className="ml-2" disabled={isUploading}>
+            <Send size={16} className="mr-2" /> {isUploading ? 'Sending...' : 'Send'}
           </Button>
         </div>
       </div>

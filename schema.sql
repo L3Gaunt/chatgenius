@@ -233,3 +233,56 @@ GRANT EXECUTE ON FUNCTION toggle_reaction TO authenticated;
 
 ALTER TABLE public.reactions REPLICA IDENTITY FULL;
 ALTER TABLE public.messages REPLICA IDENTITY FULL;
+
+-- Create storage bucket for attachments
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('attachments', 'attachments', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage policies for attachments bucket
+CREATE POLICY "Attachments are publicly accessible"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'attachments');
+
+CREATE POLICY "Users can upload attachments"
+ON storage.objects FOR INSERT
+WITH CHECK (
+  bucket_id = 'attachments' AND
+  auth.role() = 'authenticated'
+);
+
+CREATE POLICY "Users can delete their own attachments"
+ON storage.objects FOR DELETE
+USING (
+  bucket_id = 'attachments' AND
+  auth.uid()::text = (storage.foldername(name))[1]
+);
+
+-- Create a function to delete files from storage when a message is deleted
+CREATE OR REPLACE FUNCTION delete_message_attachments()
+RETURNS TRIGGER AS $$
+DECLARE
+  attachment JSONB;
+BEGIN
+  -- Loop through each attachment in the deleted message
+  FOR attachment IN SELECT * FROM jsonb_array_elements(OLD.attachments)
+  LOOP
+    -- Delete the file from storage by deleting from storage.objects table
+    DELETE FROM storage.objects 
+    WHERE bucket_id = 'attachments' 
+    AND name = attachment->>'id';
+  END LOOP;
+  
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger to automatically delete files when a message is deleted
+CREATE OR REPLACE TRIGGER delete_message_attachments_trigger
+  BEFORE DELETE ON public.messages
+  FOR EACH ROW
+  EXECUTE FUNCTION delete_message_attachments();
+
+-- Grant necessary permissions
+GRANT USAGE ON SCHEMA storage TO postgres;
+GRANT ALL ON storage.objects TO postgres;
