@@ -5,12 +5,13 @@ necessary:
 + need to be able to log out after login
 + forgot password functionality
 + direct message functionality
-- presence status
-- file upload
+? presence status
++ file upload
 
 - check for inconsistencies and duplicate definitions
 
 nice to have:
+- files deleted in bucket when deleting message
 - search over all channels
 - integrate auth with google+github
 - delete account functionality
