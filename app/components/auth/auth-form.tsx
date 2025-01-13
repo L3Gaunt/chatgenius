@@ -14,12 +14,14 @@ export function AuthForm() {
   const [loading, setLoading] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const router = useRouter()
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
+    setSuccessMessage(null)
 
     try {
       if (isSignUp) {
@@ -31,6 +33,7 @@ export function AuthForm() {
           }
         })
         if (error) throw error
+        setSuccessMessage('Please check your email for a verification link to complete your registration.')
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -103,6 +106,9 @@ export function AuthForm() {
         )}
         {error && (
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        )}
+        {successMessage && (
+          <p className="text-sm text-green-600 dark:text-green-400">{successMessage}</p>
         )}
         <Button
           type="submit"

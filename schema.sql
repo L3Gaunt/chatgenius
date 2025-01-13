@@ -277,8 +277,7 @@ BEGIN
     -- Delete the file from storage by deleting from storage.objects table
     DELETE FROM storage.objects 
     WHERE bucket_id = 'attachments' 
-    AND name = attachment->>'id'
-    AND owner IS NULL; -- Allow deletion even if owner is set
+    AND name = attachment->>'id';
   END LOOP;
   
   RETURN OLD;

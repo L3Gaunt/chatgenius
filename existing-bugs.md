@@ -23,3 +23,4 @@ nice to have:
 - efficiency: Check for the number of queries to fetch data
 - efficiency: When loading page, get initial messages/channels directly?? But that's hard I guess
 - "unread messages" notification in non-open channels.
+- apparently, when I leave the window open for too long, the live subscription stops...?
