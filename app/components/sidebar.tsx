@@ -26,9 +26,78 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
   const [loading, setLoading] = useState(true)
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
   const router = useRouter()
+  const [onlineUsers, setOnlineUsers] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     fetchChannelsAndUsers()
+
+    // ------------------- PRESENCE SETUP -------------------
+    supabase.auth.getUser().then(({ data }) => {
+      const currentUser = data.user
+      if (!currentUser) return
+
+      // 1) Create a channel named 'site-presence'.
+      const presenceChannel = supabase.channel('site-presence', {
+        config: {
+          presence: {
+            key: currentUser.id,
+          },
+        },
+      })
+
+      // 2) Listen for presence events.
+      presenceChannel
+        .on('presence', { event: 'sync' }, () => {
+          const state = presenceChannel.presenceState()
+          const newOnlineUsers: Record<string, boolean> = {}
+
+          // Flatten presence for each user. The `key` here is user.id
+          Object.keys(state).forEach((userId) => {
+            if (state[userId].length > 0) {
+              newOnlineUsers[userId] = true
+            }
+          })
+
+          // Log the updated list of active users
+          console.log("Active users:", Object.keys(newOnlineUsers))
+
+          setOnlineUsers(newOnlineUsers)
+        })
+        .on('presence', { event: 'join' }, ({ key }) => {
+          setOnlineUsers((prev) => {
+            const updated = { ...prev, [key]: true }
+            // Log the updated list of active users
+            console.log("Active users:", Object.keys(updated))
+            return updated
+          })
+        })
+        .on('presence', { event: 'leave' }, ({ key }) => {
+          // "leave" means a user (or a tab) disconnected.
+          const state = presenceChannel.presenceState()
+          const existing = state[key] || []
+          // If no presences remain for that user, mark them offline
+          if (existing.length === 0) {
+            setOnlineUsers((prev) => {
+              const updated = { ...prev }
+              delete updated[key]
+              // Log the updated list of active users
+              console.log("Active users:", Object.keys(updated))
+              return updated
+            })
+          }
+        })
+
+      // 3) Subscribe this browser/tab's presence data.
+      presenceChannel.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({
+            username: currentUser.email?.split('@')[0] || 'user',
+            joinedAt: new Date().toISOString(),
+          })
+        }
+      })
+    })
+    // ------------------- END PRESENCE SETUP -------------------
 
     // Subscribe to channel changes
     const channelSubscription = supabase
@@ -347,16 +416,29 @@ export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps
           Direct Messages <ChevronDown size={16} />
         </h2>
         <ul>
-          {directMessages.map((user) => (
-            <li 
-              key={user.id} 
-              className="flex items-center mb-1 cursor-pointer hover:bg-gray-700 p-1 rounded"
-              onClick={() => handleDirectMessageSelect(user.id)}
-            >
-              <User size={16} className="mr-2" />
-              {user.username}
-            </li>
-          ))}
+          {directMessages.map((user) => {
+            // Check if user is online
+            const isOnline = !!onlineUsers[user.id];
+
+            return (
+              <li
+                key={user.id}
+                className="flex items-center mb-1 cursor-pointer hover:bg-gray-700 p-1 rounded"
+                onClick={() => handleDirectMessageSelect(user.id)}
+              >
+                <div className="relative mr-2">
+                  <User size={16} />
+                  <div
+                    className={`
+                      absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full
+                      ${isOnline ? "bg-green-500" : "bg-gray-500"}
+                    `}
+                  />
+                </div>
+                {user.username}
+              </li>
+            );
+          })}
         </ul>
       </div>
     </div>
