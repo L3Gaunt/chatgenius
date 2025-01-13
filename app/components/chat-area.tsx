@@ -514,7 +514,6 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
           user:profiles(
             id,
             username,
-            avatar_url,
             created_at,
             updated_at
           )

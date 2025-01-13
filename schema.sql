@@ -258,6 +258,12 @@ USING (
   auth.uid()::text = (storage.foldername(name))[1]
 );
 
+-- Update storage policies to allow the postgres role to delete objects
+CREATE POLICY "Postgres can delete objects"
+ON storage.objects FOR DELETE
+TO postgres
+USING (true);
+
 -- Create a function to delete files from storage when a message is deleted
 CREATE OR REPLACE FUNCTION delete_message_attachments()
 RETURNS TRIGGER AS $$
@@ -267,22 +273,27 @@ BEGIN
   -- Loop through each attachment in the deleted message
   FOR attachment IN SELECT * FROM jsonb_array_elements(OLD.attachments)
   LOOP
+    -- The attachment->>'id' contains the full path including channel_id/filename
     -- Delete the file from storage by deleting from storage.objects table
     DELETE FROM storage.objects 
     WHERE bucket_id = 'attachments' 
-    AND name = attachment->>'id';
+    AND name = attachment->>'id'
+    AND owner IS NULL; -- Allow deletion even if owner is set
   END LOOP;
   
   RETURN OLD;
 END;
 $$ LANGUAGE plpgsql;
 
+-- Drop existing trigger if it exists
+DROP TRIGGER IF EXISTS delete_message_attachments_trigger ON public.messages;
+
 -- Create trigger to automatically delete files when a message is deleted
-CREATE OR REPLACE TRIGGER delete_message_attachments_trigger
+CREATE TRIGGER delete_message_attachments_trigger
   BEFORE DELETE ON public.messages
   FOR EACH ROW
   EXECUTE FUNCTION delete_message_attachments();
 
 -- Grant necessary permissions
-GRANT USAGE ON SCHEMA storage TO postgres;
-GRANT ALL ON storage.objects TO postgres;
+GRANT USAGE ON SCHEMA storage TO postgres, authenticated;
+GRANT ALL ON storage.objects TO postgres, authenticated;
