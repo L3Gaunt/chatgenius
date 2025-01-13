@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { Database } from '@/types/supabase'
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { User, Hash } from 'lucide-react'
+import { Message } from "../types/message";
 
 type DatabaseMessage = Database['public']['Tables']['messages']['Row']
 type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
@@ -16,15 +17,6 @@ type Channel = Database['public']['Tables']['channels']['Row']
 type DatabaseReaction = Database['public']['Tables']['reactions']['Row']
 type MessageRow = Database['public']['Tables']['messages']['Row']
 type ReactionRow = Database['public']['Tables']['reactions']['Row']
-
-interface Message extends DatabaseMessage {
-  user: DatabaseProfile;
-  reactions: {
-    emoji: string;
-    count: number;
-  }[];
-  replies?: Message[];
-}
 
 interface ChatAreaProps {
   channelId?: string;

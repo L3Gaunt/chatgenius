@@ -6,18 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FileAttachment } from './file-attachment'
 import { Database } from '@/types/supabase'
+import { Message } from "../types/message";
 
 type DatabaseMessage = Database['public']['Tables']['messages']['Row']
 type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
-
-interface Message extends DatabaseMessage {
-  user: DatabaseProfile;
-  reactions: {
-    emoji: string;
-    count: number;
-  }[];
-  replies?: Message[];
-}
 
 interface ChatInputProps {
   onSendMessage: (content: string, attachments: File[]) => void;
