@@ -15,13 +15,13 @@ type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
 
 interface ChatInputProps {
-  onSendMessage: (content: string, attachments: File[]) => void;
+  onSendMessage: (content: string, attachments: File[]) => Promise<string | undefined>;
   replyingTo: Message | null;
   onCancelReply: () => void;
 }
 
 export function ChatInput({ onSendMessage, replyingTo, onCancelReply }: ChatInputProps) {
-  const [newMessage, setNewMessage] = useState<string>('')
+  const [message, setMessage] = useState('')
   const [attachments, setAttachments] = useState<File[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -34,13 +34,31 @@ export function ChatInput({ onSendMessage, replyingTo, onCancelReply }: ChatInpu
     return true
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if ((newMessage.trim() || attachments.length > 0) && !isUploading) {
+  const handleSend = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    if ((message.trim() || attachments.length > 0) && !isUploading) {
       setIsUploading(true)
       try {
-        await onSendMessage(newMessage, attachments)
-        setNewMessage('')
+        const messageId = await onSendMessage(message.trim(), attachments)
+        if (messageId) {
+          // Generate embeddings for the message
+          try {
+            const response = await fetch('/api/embeddings', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ messageId }),
+            })
+
+            if (!response.ok) {
+              console.error('Failed to generate embeddings:', await response.text())
+            }
+          } catch (error) {
+            console.error('Error generating embeddings:', error)
+          }
+        }
+        setMessage('')
         setAttachments([])
       } catch (error) {
         toast.error('Failed to send message. Please try again.')
@@ -68,12 +86,12 @@ export function ChatInput({ onSendMessage, replyingTo, onCancelReply }: ChatInpu
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleSubmit(e as unknown as React.FormEvent)
+      handleSend()
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="p-4 border-t flex flex-col">
+    <form onSubmit={handleSend} className="p-4 border-t flex flex-col">
       {replyingTo && (
         <div className="mb-2 p-2 bg-gray-100 rounded flex items-center justify-between">
           <span className="text-sm">
@@ -104,8 +122,8 @@ export function ChatInput({ onSendMessage, replyingTo, onCancelReply }: ChatInpu
           <Input
             type="text"
             placeholder={replyingTo ? "Type your reply..." : "Type a message..."}
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             className="flex-1 mr-2"
             disabled={isUploading}

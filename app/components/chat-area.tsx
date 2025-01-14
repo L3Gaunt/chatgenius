@@ -8,8 +8,9 @@ import { ChatInput } from './chat-input'
 import { supabase } from '@/lib/supabase'
 import { Database } from '@/types/supabase'
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
-import { User, Hash } from 'lucide-react'
-import { Message } from "../types/message";
+import { User, Hash, X } from 'lucide-react'
+import { Message, transformDatabaseMessage } from "../types/message"
+import { SearchSimilar } from './search-similar'
 
 type DatabaseMessage = Database['public']['Tables']['messages']['Row']
 type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
@@ -275,20 +276,10 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
             }
 
             if (userData) {
-              const newMessage: Message = {
-                id: messageData.id,
-                channel_id: messageData.channel_id,
-                user_id: messageData.user_id,
-                parent_message_id: messageData.parent_message_id,
-                content: messageData.content,
-                attachments: messageData.attachments || [],
-                timestamp: messageData.timestamp,
-                created_at: messageData.created_at,
-                updated_at: messageData.updated_at,
-                user: userData,
-                reactions: [],
-                replies: []
-              }
+              const newMessage = transformDatabaseMessage({
+                ...messageData,
+                user: userData
+              })
 
               if (payload.eventType === 'INSERT') {
                 console.log('Inserting new message:', newMessage)
@@ -525,8 +516,12 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
       // Clear the replyingTo state after sending
       setReplyingTo(null)
 
+      // Return the message ID
+      return message.id
+
     } catch (error) {
       console.error('Error sending message:', error)
+      throw error
     }
   }
 
@@ -594,6 +589,10 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
     scrollToBottom()
   }, [messages])
 
+  const handleReply = (message: Message) => {
+    setReplyingTo(message)
+  }
+
   if (!channelId && !userId) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-500">
@@ -638,11 +637,32 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
             currentUserId={currentUserId}
             onDelete={handleDeleteMessage}
             onReaction={handleReaction}
-            onReply={setReplyingTo}
+            onReply={handleReply}
           />
         ))}
         <div ref={messagesEndRef} />
       </ScrollArea>
+      {replyingTo && (
+        <div className="px-4 py-2 bg-gray-100">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">
+              Replying to {replyingTo.user.username}
+            </span>
+            <button
+              onClick={() => setReplyingTo(null)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+      <SearchSimilar
+        currentUserId={currentUserId}
+        onDelete={handleDeleteMessage}
+        onReaction={handleReaction}
+        onReply={handleReply}
+      />
       <ChatInput 
         onSendMessage={handleSendMessage}
         replyingTo={replyingTo}

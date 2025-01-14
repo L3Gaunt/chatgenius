@@ -121,8 +121,8 @@ BEGIN
     messages.user_id,
     1 - (messages.embedding <=> query_embedding) as similarity
   FROM messages
-  WHERE 1 - (messages.embedding <=> query_embedding) > similarity_threshold
-  ORDER BY messages.embedding <=> query_embedding
+  WHERE messages.embedding IS NOT NULL  -- Only search messages with embeddings
+  ORDER BY messages.embedding <=> query_embedding  -- Order by similarity
   LIMIT match_count;
 END;
 $$;
