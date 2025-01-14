@@ -8,6 +8,13 @@ export async function GET(
 ) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    
+    // Check if user is authenticated
+    const { data: { session }, error: authError } = await supabase.auth.getSession()
+    if (authError || !session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { data: user, error } = await supabase
       .from('profiles')
       .select('id, username, created_at, updated_at')

@@ -10,10 +10,17 @@ const openai = new OpenAI({
 // POST /api/embeddings - Add embeddings to a message
 export async function POST(request: Request) {
   try {
+    const supabase = createRouteHandlerClient({ cookies })
+    
+    // Check if user is authenticated
+    const { data: { session }, error: authError } = await supabase.auth.getSession()
+    if (authError || !session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { messageId } = await request.json()
     
     // Get the message content
-    const supabase = createRouteHandlerClient({ cookies })
     const { data: message, error: messageError } = await supabase
       .from('messages')
       .select('content')
