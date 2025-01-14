@@ -12,6 +12,14 @@ const MAX_RESULTS = 5
 // GET /api/embeddings/search - Search for similar messages
 export async function GET(request: Request) {
   try {
+    const supabase = createRouteHandlerClient({ cookies })
+    
+    // Check if user is authenticated
+    const { data: { session }, error: authError } = await supabase.auth.getSession()
+    if (authError || !session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { searchParams } = new URL(request.url)
     const query = searchParams.get('query')
 
@@ -29,7 +37,6 @@ export async function GET(request: Request) {
     const embedding = embeddingResponse.data[0].embedding
 
     // Search for similar messages using the database function
-    const supabase = createRouteHandlerClient({ cookies })
     const { data: similarMessages, error } = await supabase
       .rpc('search_messages', {
         query_embedding: embedding,
