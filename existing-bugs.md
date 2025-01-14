@@ -11,7 +11,7 @@ necessary:
 - check for inconsistencies and duplicate definitions
 
 nice to have:
-- files deleted in bucket when deleting message
+- files deleted in bucket when deleting message <- delete files with storage api instead of edge function
 - search over all channels
 - integrate auth with google+github
 - delete account functionality
