@@ -1,5 +1,27 @@
 -- Supabase database schema for ChatGenius
 
+-- Enable vector extension
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
+
+-- Drop existing storage policies
+DROP POLICY IF EXISTS "Attachments are publicly accessible" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Postgres can delete objects" ON storage.objects;
+
+-- Drop existing tables (in correct order to handle dependencies)
+DROP TABLE IF EXISTS public.reactions CASCADE;
+DROP TABLE IF EXISTS public.messages CASCADE;
+DROP TABLE IF EXISTS public.channel_users CASCADE;
+DROP TABLE IF EXISTS public.channels CASCADE;
+DROP TABLE IF EXISTS public.profiles CASCADE;
+
+-- Drop existing functions
+DROP FUNCTION IF EXISTS public.handle_updated_at CASCADE;
+DROP FUNCTION IF EXISTS public.search_messages CASCADE;
+DROP FUNCTION IF EXISTS public.toggle_reaction CASCADE;
+DROP FUNCTION IF EXISTS public.delete_message_attachments CASCADE;
+
 -- 1) Profiles table (extends Supabase Auth users)
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
@@ -60,13 +82,53 @@ CREATE TABLE IF NOT EXISTS public.messages (
   attachments JSONB DEFAULT '[]',  -- For storing file metadata directly
   timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  embedding vector(1536)
 );
 
 CREATE TRIGGER messages_updated_at
   BEFORE UPDATE ON public.messages
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_updated_at();
+
+-- Create an index for faster similarity searches
+CREATE INDEX IF NOT EXISTS messages_embedding_idx 
+ON public.messages 
+USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
+
+-- Create a function to search messages by similarity
+CREATE OR REPLACE FUNCTION search_messages(
+  query_embedding vector(1536),
+  similarity_threshold float,
+  match_count int
+)
+RETURNS TABLE (
+  id UUID,
+  content TEXT,
+  channel_id UUID,
+  user_id UUID,
+  similarity float
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    messages.id,
+    messages.content,
+    messages.channel_id,
+    messages.user_id,
+    1 - (messages.embedding <=> query_embedding) as similarity
+  FROM messages
+  WHERE 1 - (messages.embedding <=> query_embedding) > similarity_threshold
+  ORDER BY messages.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+
+-- Grant execute permission on the function
+GRANT EXECUTE ON FUNCTION search_messages TO authenticated;
 
 -- 5) Reactions table
 CREATE TABLE IF NOT EXISTS public.reactions (
