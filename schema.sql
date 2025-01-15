@@ -84,7 +84,8 @@ CREATE TABLE IF NOT EXISTS public.messages (
   timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  embedding vector(1536)
+  embedding vector(1536),
+  is_embedding_in_progress BOOLEAN DEFAULT false
 );
 
 CREATE TRIGGER messages_updated_at
@@ -92,11 +93,15 @@ CREATE TRIGGER messages_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_updated_at();
 
--- Create an index for faster similarity searches
+-- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS messages_embedding_idx 
 ON public.messages 
 USING hnsw (embedding vector_cosine_ops)
 WITH (m = 16, ef_construction = 64);
+
+CREATE INDEX IF NOT EXISTS messages_embedding_progress_idx
+ON public.messages(is_embedding_in_progress)
+WHERE is_embedding_in_progress = true;
 
 -- Create a function to search messages by similarity
 CREATE OR REPLACE FUNCTION search_messages(
@@ -105,25 +110,30 @@ CREATE OR REPLACE FUNCTION search_messages(
   match_count int
 )
 RETURNS TABLE (
-  message_id UUID,
-  message_content TEXT,
-  ...
+  id UUID,
+  content TEXT,
+  channel_id UUID,
   user_id UUID,
   username TEXT,
-  ...
+  user_created_at TIMESTAMPTZ,
+  user_updated_at TIMESTAMPTZ,
+  similarity float
 ) AS $$
 BEGIN
   RETURN QUERY
     SELECT
-      m.id AS message_id,
-      m.content AS message_content,
-      ...
-      p.id AS user_id,
+      m.id,
+      m.content,
+      m.channel_id,
+      p.id as user_id,
       p.username,
-      ...
+      p.created_at as user_created_at,
+      p.updated_at as user_updated_at,
+      1 - (m.embedding <=> query_embedding) as similarity
     FROM messages m
     JOIN profiles p ON m.user_id = p.id
     WHERE m.embedding IS NOT NULL
+      AND 1 - (m.embedding <=> query_embedding) > similarity_threshold
     ORDER BY m.embedding <=> query_embedding
     LIMIT match_count;
 END;
