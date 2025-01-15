@@ -675,21 +675,6 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
         ))}
         <div ref={messagesEndRef} />
       </ScrollArea>
-      {replyingTo && (
-        <div className="px-4 py-2 bg-gray-100">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">
-              Replying to {replyingTo.user.username}
-            </span>
-            <button
-              onClick={() => setReplyingTo(null)}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-      )}
       <ChatInput 
         onSendMessage={handleSendMessage}
         replyingTo={replyingTo}
