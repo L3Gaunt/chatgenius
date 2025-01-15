@@ -8,7 +8,6 @@ DROP POLICY IF EXISTS "Attachments are publicly accessible" ON storage.objects;
 DROP POLICY IF EXISTS "Users can upload attachments" ON storage.objects;
 DROP POLICY IF EXISTS "Users can delete their own attachments" ON storage.objects;
 DROP POLICY IF EXISTS "Postgres can delete objects" ON storage.objects;
-DROP POLICY IF EXISTS "Users can create their own profile" ON public.profiles;
 
 -- Drop existing tables (in correct order to handle dependencies)
 DROP TABLE IF EXISTS public.reactions CASCADE;
