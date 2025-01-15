@@ -10,7 +10,7 @@ import { Database } from '@/types/supabase'
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { User, Hash, X } from 'lucide-react'
 import { Message, transformDatabaseMessage } from "../types/message"
-import { SearchSimilar } from './search-similar'
+import { Button } from "@/components/ui/button"
 
 type DatabaseMessage = Database['public']['Tables']['messages']['Row']
 type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
@@ -29,7 +29,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
   const [channel, setChannel] = useState<Channel | null>(null)
   const [dmUser, setDmUser] = useState<DatabaseProfile | null>(null)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<Message[]>([])
   const [currentUserId, setCurrentUserId] = useState<string>('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
@@ -53,113 +53,102 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
     setMessages([])
     
     const fetchChannelAndMessages = async () => {
-      // If we have a userId, fetch the user's profile
-      if (userId) {
-        const { data: userData, error: userError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .single()
+      try {
+        // If we have a userId, fetch the user's profile
+        if (userId) {
+          const { data: userData, error: userError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single()
 
-        if (userError) {
-          console.error('Error fetching user:', userError)
-        } else {
-          setDmUser(userData)
-        }
-      } else {
-        setDmUser(null)
-      }
-
-      let targetChannelId = channelId
-
-      // If we have a userId, find the DM channel
-      if (userId) {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-
-        // Create a consistent name pattern for DM channels
-        const dmChannelName = [user.id, userId].sort().join('_')
-
-        const { data: dmChannel } = await supabase
-          .from('channels')
-          .select('id')
-          .eq('type', 'direct')
-          .eq('name', dmChannelName)
-          .single()
-
-        if (dmChannel) {
-          targetChannelId = dmChannel.id
-        }
-      }
-
-      if (!targetChannelId) return
-
-      // Fetch channel details
-      const { data: channelData, error } = await supabase
-        .from('channels')
-        .select('*')
-        .eq('id', targetChannelId)
-        .single()
-
-      if (error) {
-        console.error('Error fetching channel:', error)
-        return
-      }
-
-      setChannel(channelData)
-
-      // Fetch messages for this channel
-      const { data: messagesData, error: messagesError } = await supabase
-        .from('messages')
-        .select(`
-          *,
-          user:profiles(
-            id,
-            username,
-            created_at,
-            updated_at
-          ),
-          reactions(emoji, user_id),
-          replies:messages!parent_message_id(
-            *,
-            user:profiles(
-              id,
-              username,
-              created_at,
-              updated_at
-            ),
-            reactions(emoji, user_id)
-          )
-        `)
-        .eq('channel_id', targetChannelId)
-        .is('parent_message_id', null)
-        .order('created_at', { ascending: true })
-
-      if (messagesError) {
-        console.error('Error fetching messages:', messagesError)
-        return
-      }
-
-      // Process messages to include reactions counts
-      const processedMessages = messagesData?.map((message: any) => {
-        const messageReactions = message.reactions || [];
-        const reactionsByEmoji = messageReactions.reduce((acc: { [key: string]: { count: number, users: string[] } }, reaction: DatabaseReaction) => {
-          if (!acc[reaction.emoji]) {
-            acc[reaction.emoji] = { count: 0, users: [] };
+          if (userError) {
+            console.error('Error fetching user:', userError)
+          } else {
+            setDmUser(userData)
           }
-          acc[reaction.emoji].count += 1;
-          acc[reaction.emoji].users.push(reaction.user_id);
-          return acc;
-        }, {});
+        } else {
+          setDmUser(null)
+        }
 
-        const formattedReactions = Object.entries(reactionsByEmoji).map(([emoji, data]) => ({
-          emoji,
-          count: (data as { count: number, users: string[] }).count,
-          users: (data as { count: number, users: string[] }).users
-        }));
+        let targetChannelId = channelId
 
-        const processedReplies = message.replies?.map((reply: any) => {
-          const replyReactionsByEmoji = (reply.reactions || []).reduce((acc: { [key: string]: { count: number, users: string[] } }, reaction: DatabaseReaction) => {
+        // If we have a userId, find or create the DM channel
+        if (userId) {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (!user) return
+
+          // Create a consistent name pattern for DM channels
+          const dmChannelName = [user.id, userId].sort().join('_')
+
+          const { data: dmChannel } = await supabase
+            .from('channels')
+            .select('id')
+            .eq('type', 'direct')
+            .eq('name', dmChannelName)
+            .single()
+
+          if (dmChannel) {
+            targetChannelId = dmChannel.id
+          }
+        }
+
+        if (!targetChannelId) return
+
+        // Fetch channel details and messages in parallel
+        const [channelResponse, messagesResponse] = await Promise.all([
+          supabase
+            .from('channels')
+            .select('*')
+            .eq('id', targetChannelId)
+            .single(),
+          
+          supabase
+            .from('messages')
+            .select(`
+              *,
+              user:profiles(
+                id,
+                username,
+                created_at,
+                updated_at
+              ),
+              reactions(emoji, user_id),
+              replies:messages!parent_message_id(
+                *,
+                user:profiles(
+                  id,
+                  username,
+                  created_at,
+                  updated_at
+                ),
+                reactions(emoji, user_id)
+              )
+            `)
+            .eq('channel_id', targetChannelId)
+            .is('parent_message_id', null)
+            .order('created_at', { ascending: true })
+        ])
+
+        const { data: channelData, error: channelError } = channelResponse
+        const { data: messagesData, error: messagesError } = messagesResponse
+
+        if (channelError) {
+          console.error('Error fetching channel:', channelError)
+          return
+        }
+
+        if (messagesError) {
+          console.error('Error fetching messages:', messagesError)
+          return
+        }
+
+        setChannel(channelData)
+
+        // Transform messages to include properly formatted reactions
+        const transformedMessages = messagesData?.map((message: any) => {
+          // Process reactions
+          const reactionsByEmoji = (message.reactions || []).reduce((acc: any, reaction: any) => {
             if (!acc[reaction.emoji]) {
               acc[reaction.emoji] = { count: 0, users: [] };
             }
@@ -168,28 +157,49 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
             return acc;
           }, {});
 
-          const formattedReplyReactions = Object.entries(replyReactionsByEmoji).map(([emoji, data]) => ({
+          const formattedReactions = Object.entries(reactionsByEmoji).map(([emoji, data]: [string, any]) => ({
             emoji,
-            count: (data as { count: number, users: string[] }).count,
-            users: (data as { count: number, users: string[] }).users
+            count: data.count,
+            users: data.users
           }));
 
+          // Process replies if they exist
+          const processedReplies = message.replies?.map((reply: any) => {
+            const replyReactionsByEmoji = (reply.reactions || []).reduce((acc: any, reaction: any) => {
+              if (!acc[reaction.emoji]) {
+                acc[reaction.emoji] = { count: 0, users: [] };
+              }
+              acc[reaction.emoji].count += 1;
+              acc[reaction.emoji].users.push(reaction.user_id);
+              return acc;
+            }, {});
+
+            const formattedReplyReactions = Object.entries(replyReactionsByEmoji).map(([emoji, data]: [string, any]) => ({
+              emoji,
+              count: data.count,
+              users: data.users
+            }));
+
+            return {
+              ...reply,
+              reactions: formattedReplyReactions
+            };
+          });
+
           return {
-            ...reply,
-            reactions: formattedReplyReactions
+            ...message,
+            reactions: formattedReactions,
+            replies: processedReplies || []
           };
-        });
+        }) || [];
 
-        return {
-          ...message,
-          reactions: formattedReactions,
-          replies: processedReplies || []
-        };
-      }) || [];
-
-      setMessages(processedMessages)
-      setLoading(false)
-      scrollToBottom()
+        setMessages(transformedMessages)
+        setLoading(false)
+        scrollToBottom()
+      } catch (error) {
+        console.error('Error fetching data:', error)
+        setLoading(false)
+      }
     }
 
     fetchChannelAndMessages()
@@ -257,66 +267,83 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
               return
             }
 
-            const messageData = payload.new as MessageRow
-            if (!messageData || !messageData.user_id) {
-              console.log('No valid message data in payload')
-              return
-            }
+            // For INSERT and UPDATE events, fetch the complete message data
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              const { data: messageData, error: messageError } = await supabase
+                .from('messages')
+                .select(`
+                  *,
+                  user:profiles(
+                    id,
+                    username,
+                    created_at,
+                    updated_at
+                  ),
+                  reactions(emoji, user_id),
+                  replies:messages!parent_message_id(
+                    *,
+                    user:profiles(
+                      id,
+                      username,
+                      created_at,
+                      updated_at
+                    ),
+                    reactions(emoji, user_id)
+                  )
+                `)
+                .eq('id', payload.new.id)
+                .single()
 
-            // For INSERT and UPDATE events
-            const { data: userData, error: userError } = await supabase
-              .from('profiles')
-              .select('id, username, created_at, updated_at')
-              .eq('id', messageData.user_id)
-              .single()
+              if (messageError) {
+                console.error('Error fetching message data:', messageError)
+                return
+              }
 
-            if (userError) {
-              console.error('Error fetching user data:', userError)
-              return
-            }
+              if (messageData) {
+                // Transform the message data
+                const transformedMessage = {
+                  ...messageData,
+                  reactions: processReactions(messageData.reactions || []),
+                  replies: messageData.replies?.map((reply: any) => ({
+                    ...reply,
+                    reactions: processReactions(reply.reactions || [])
+                  })) || []
+                }
 
-            if (userData) {
-              const newMessage = transformDatabaseMessage({
-                ...messageData,
-                user: userData
-              })
-
-              if (payload.eventType === 'INSERT') {
-                console.log('Inserting new message:', newMessage)
                 setMessages(prev => {
-                  // If this is a reply (has parent_message_id), add it to the parent's replies
-                  if (newMessage.parent_message_id) {
+                  if (payload.eventType === 'INSERT') {
+                    if (transformedMessage.parent_message_id) {
+                      // Add reply to parent message
+                      return prev.map(msg => {
+                        if (msg.id === transformedMessage.parent_message_id) {
+                          return {
+                            ...msg,
+                            replies: [...(msg.replies || []), transformedMessage]
+                          }
+                        }
+                        return msg
+                      })
+                    }
+                    // Add new top-level message
+                    return [...prev, transformedMessage]
+                  } else {
+                    // Update existing message
                     return prev.map(msg => {
-                      if (msg.id === newMessage.parent_message_id) {
+                      if (msg.id === transformedMessage.id) {
+                        return transformedMessage
+                      }
+                      if (msg.replies?.some(reply => reply.id === transformedMessage.id)) {
                         return {
                           ...msg,
-                          replies: [...(msg.replies || []), newMessage]
+                          replies: msg.replies.map(reply =>
+                            reply.id === transformedMessage.id ? transformedMessage : reply
+                          )
                         }
                       }
                       return msg
                     })
                   }
-                  // If it's a top-level message, add it to the messages array
-                  return [...prev, newMessage]
                 })
-              } else if (payload.eventType === 'UPDATE') {
-                console.log('Updating message:', newMessage)
-                setMessages(prev => prev.map(msg => {
-                  // If this is the message being updated
-                  if (msg.id === newMessage.id) {
-                    return newMessage
-                  }
-                  // If this message has the updated message as a reply
-                  if (msg.replies?.some(reply => reply.id === newMessage.id)) {
-                    return {
-                      ...msg,
-                      replies: msg.replies.map(reply => 
-                        reply.id === newMessage.id ? newMessage : reply
-                      )
-                    }
-                  }
-                  return msg
-                }))
               }
             }
           }
@@ -333,9 +360,9 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
             
             let messageId: string | undefined
             if (payload.eventType === 'DELETE') {
-              messageId = (payload.old as ReactionRow)?.message_id
+              messageId = payload.old?.message_id
             } else {
-              messageId = (payload.new as ReactionRow)?.message_id
+              messageId = payload.new?.message_id
             }
 
             if (!messageId) {
@@ -343,81 +370,63 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
               return
             }
 
-            console.log('Fetching updated reactions for message:', messageId)
-            // Fetch updated reactions for the message
-            const { data: reactionsData, error: reactionsError } = await supabase
-              .from('reactions')
-              .select('emoji, user_id')
-              .eq('message_id', messageId)
+            // Fetch the complete message data with reactions
+            const { data: messageData, error: messageError } = await supabase
+              .from('messages')
+              .select(`
+                *,
+                user:profiles(
+                  id,
+                  username,
+                  created_at,
+                  updated_at
+                ),
+                reactions(emoji, user_id),
+                replies:messages!parent_message_id(
+                  *,
+                  user:profiles(
+                    id,
+                    username,
+                    created_at,
+                    updated_at
+                  ),
+                  reactions(emoji, user_id)
+                )
+              `)
+              .eq('id', messageId)
+              .single()
 
-            if (reactionsError) {
-              console.error('Error fetching reactions:', reactionsError)
+            if (messageError) {
+              console.error('Error fetching message data:', messageError)
               return
             }
 
-            console.log('Received reactions data:', reactionsData)
-            // Update the message with new reactions
-            setMessages(prev => {
-              const updated = prev.map(message => {
-                // Check if this is the message that got the reaction
-                if (message.id === messageId) {
-                  const reactionsByEmoji = (reactionsData || []).reduce((acc: { [key: string]: { count: number, users: string[] } }, reaction: { emoji: string, user_id: string }) => {
-                    if (!acc[reaction.emoji]) {
-                      acc[reaction.emoji] = { count: 0, users: [] };
-                    }
-                    acc[reaction.emoji].count += 1;
-                    acc[reaction.emoji].users.push(reaction.user_id);
-                    return acc;
-                  }, {});
+            if (messageData) {
+              // Transform the message data
+              const transformedMessage = {
+                ...messageData,
+                reactions: processReactions(messageData.reactions || []),
+                replies: messageData.replies?.map((reply: any) => ({
+                  ...reply,
+                  reactions: processReactions(reply.reactions || [])
+                })) || []
+              }
 
-                  const formattedReactions = Object.entries(reactionsByEmoji).map(([emoji, data]) => ({
-                    emoji,
-                    count: data.count,
-                    users: data.users
-                  }));
-
+              setMessages(prev => prev.map(msg => {
+                if (msg.id === messageId) {
+                  return transformedMessage
+                }
+                if (msg.replies?.some(reply => reply.id === messageId)) {
                   return {
-                    ...message,
-                    reactions: formattedReactions
+                    ...msg,
+                    replies: msg.replies.map(reply =>
+                      reply.id === messageId ? transformedMessage : reply
+                    )
                   }
                 }
-
-                // Check if the reaction is for a reply
-                if (message.replies?.some(reply => reply.id === messageId)) {
-                  return {
-                    ...message,
-                    replies: message.replies.map(reply => {
-                      if (reply.id === messageId) {
-                        const reactionsByEmoji = (reactionsData || []).reduce((acc: { [key: string]: { count: number, users: string[] } }, reaction: { emoji: string, user_id: string }) => {
-                          if (!acc[reaction.emoji]) {
-                            acc[reaction.emoji] = { count: 0, users: [] };
-                          }
-                          acc[reaction.emoji].count += 1;
-                          acc[reaction.emoji].users.push(reaction.user_id);
-                          return acc;
-                        }, {});
-
-                        const formattedReactions = Object.entries(reactionsByEmoji).map(([emoji, data]) => ({
-                          emoji,
-                          count: data.count,
-                          users: data.users
-                        }));
-
-                        return {
-                          ...reply,
-                          reactions: formattedReactions
-                        }
-                      }
-                      return reply
-                    })
-                  }
-                }
-
-                return message
-              })
-              console.log('Updated messages state:', updated)
-              return updated
-            })
+                return msg
+              }))
+            }
           }
         )
         .subscribe()
@@ -431,6 +440,24 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
       }
     }
   }, [channelId, userId])
+
+  // Helper function to process reactions
+  const processReactions = (reactions: any[]) => {
+    const reactionsByEmoji = reactions.reduce((acc: any, reaction: any) => {
+      if (!acc[reaction.emoji]) {
+        acc[reaction.emoji] = { count: 0, users: [] };
+      }
+      acc[reaction.emoji].count += 1;
+      acc[reaction.emoji].users.push(reaction.user_id);
+      return acc;
+    }, {});
+
+    return Object.entries(reactionsByEmoji).map(([emoji, data]: [string, any]) => ({
+      emoji,
+      count: data.count,
+      users: data.users
+    }));
+  }
 
   const handleSendMessage = async (content: string, attachments: File[]) => {
     if (!currentUserId) return
@@ -563,18 +590,11 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
     }
   }
 
-  const filteredMessages = messages.filter(message => 
-    message.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    message.user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (message.replies && message.replies.some(reply => 
-      reply.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      reply.user.username.toLowerCase().includes(searchQuery.toLowerCase())
-    ))
-  )
-
-  const handleSearch = (query: string) => {
-    setSearchQuery(query)
+  const handleSearch = (searchMessages: Message[]) => {
+    setSearchResults(searchMessages)
   }
+
+  const displayMessages = searchResults.length > 0 ? searchResults : messages
 
   const scrollToBottom = () => {
     if (scrollAreaRef.current) {
@@ -630,7 +650,20 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
         <SearchBox onSearch={handleSearch} />
       </div>
       <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
-        {filteredMessages.map((message) => (
+        {searchResults.length > 0 && (
+          <div className="mb-4 p-2 bg-gray-100 dark:bg-gray-800 rounded">
+            <h3 className="font-semibold mb-2">Search Results</h3>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setSearchResults([])}
+              className="mb-2"
+            >
+              Clear Search
+            </Button>
+          </div>
+        )}
+        {displayMessages.map((message) => (
           <MessageComponent 
             key={message.id} 
             message={message}
@@ -657,12 +690,6 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
           </div>
         </div>
       )}
-      <SearchSimilar
-        currentUserId={currentUserId}
-        onDelete={handleDeleteMessage}
-        onReaction={handleReaction}
-        onReply={handleReply}
-      />
       <ChatInput 
         onSendMessage={handleSendMessage}
         replyingTo={replyingTo}

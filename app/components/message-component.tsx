@@ -5,23 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Smile, MessageSquare, Trash2 } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog"
-import { Database } from '@/types/supabase'
+import { Message } from '../types/message'
 
 const emojis = ['👍', '❤️', '😂', '🎉', '🤔', '👀']
-
-type DatabaseMessage = Database['public']['Tables']['messages']['Row']
-type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
-type DatabaseReaction = Database['public']['Tables']['reactions']['Row']
-
-interface Message extends DatabaseMessage {
-  user: DatabaseProfile;
-  reactions: {
-    emoji: string;
-    count: number;
-    users?: string[];  // Add users who reacted
-  }[];
-  replies?: Message[];
-}
 
 interface MessageComponentProps {
   message: Message;
@@ -32,6 +18,12 @@ interface MessageComponentProps {
   onReply: (message: Message) => void;
 }
 
+interface Reaction {
+  emoji: string;
+  count: number;
+  users?: string[];
+}
+
 export const MessageComponent = ({ 
   message, 
   isReply = false,
@@ -40,7 +32,6 @@ export const MessageComponent = ({
   onReaction,
   onReply
 }: MessageComponentProps) => {
-  const attachments = message.attachments as { id: string; name: string; url: string; }[] || []
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = React.useState(false)
   const canDelete = message.user_id === currentUserId
   
@@ -65,9 +56,9 @@ export const MessageComponent = ({
         )}
       </div>
       <p>{message.content}</p>
-      {attachments.length > 0 && (
+      {message.attachments.length > 0 && (
         <div className="mt-2 space-y-2">
-          {attachments.map(attachment => (
+          {message.attachments.map((attachment) => (
             <div key={attachment.id} className="flex items-center bg-gray-100 p-2 rounded-md">
               <a href={attachment.url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
                 {attachment.name}
@@ -77,7 +68,7 @@ export const MessageComponent = ({
         </div>
       )}
       <div className="mt-1 flex items-center space-x-2">
-        {message.reactions.map(({ emoji, count, users = [] }) => {
+        {message.reactions.map(({ emoji, count, users = [] }: Reaction) => {
           const hasReacted = users.includes(currentUserId)
           return (
             <Button
@@ -131,7 +122,7 @@ export const MessageComponent = ({
       </div>
       {message.replies && message.replies.length > 0 && (
         <div className="mt-2">
-          {message.replies.map((reply) => (
+          {message.replies.map((reply: Message) => (
             <MessageComponent
               key={reply.id}
               message={reply}
@@ -146,4 +137,4 @@ export const MessageComponent = ({
       )}
     </div>
   )
-} 
+}

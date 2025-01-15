@@ -36,19 +36,87 @@ export async function GET(request: Request) {
 
     const embedding = embeddingResponse.data[0].embedding
 
-    // Search for similar messages using the database function
+    // Search for similar messages and include user data in the same query
     const { data: similarMessages, error } = await supabase
       .rpc('search_messages', {
         query_embedding: embedding,
         similarity_threshold: 0.0, // No threshold cutoff
         match_count: MAX_RESULTS
       })
+      .select(`
+        *,
+        user:profiles(
+          id,
+          username,
+          created_at,
+          updated_at
+        ),
+        reactions(emoji, user_id),
+        replies:messages!parent_message_id(
+          *,
+          user:profiles(
+            id,
+            username,
+            created_at,
+            updated_at
+          ),
+          reactions(emoji, user_id)
+        )
+      `)
 
     if (error) {
       return NextResponse.json({ error: 'Failed to search messages' }, { status: 500 })
     }
 
-    return NextResponse.json(similarMessages)
+    // Transform messages to include properly formatted reactions and user data
+    const transformedMessages = similarMessages.map((message: any) => {
+      // Process reactions
+      const reactionsByEmoji = (message.reactions || []).reduce((acc: any, reaction: any) => {
+        if (!acc[reaction.emoji]) {
+          acc[reaction.emoji] = { count: 0, users: [] };
+        }
+        acc[reaction.emoji].count += 1;
+        acc[reaction.emoji].users.push(reaction.user_id);
+        return acc;
+      }, {});
+
+      const formattedReactions = Object.entries(reactionsByEmoji).map(([emoji, data]: [string, any]) => ({
+        emoji,
+        count: data.count,
+        users: data.users
+      }));
+
+      // Process replies if they exist
+      const processedReplies = message.replies?.map((reply: any) => {
+        const replyReactionsByEmoji = (reply.reactions || []).reduce((acc: any, reaction: any) => {
+          if (!acc[reaction.emoji]) {
+            acc[reaction.emoji] = { count: 0, users: [] };
+          }
+          acc[reaction.emoji].count += 1;
+          acc[reaction.emoji].users.push(reaction.user_id);
+          return acc;
+        }, {});
+
+        const formattedReplyReactions = Object.entries(replyReactionsByEmoji).map(([emoji, data]: [string, any]) => ({
+          emoji,
+          count: data.count,
+          users: data.users
+        }));
+
+        return {
+          ...reply,
+          reactions: formattedReplyReactions
+        };
+      });
+
+      return {
+        ...message,
+        reactions: formattedReactions,
+        replies: processedReplies || []
+      };
+    });
+
+    return NextResponse.json(transformedMessages)
   } catch (error) {
     console.error('Error in GET /api/embeddings/search:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
