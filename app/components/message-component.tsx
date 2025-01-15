@@ -56,9 +56,9 @@ export const MessageComponent = ({
         )}
       </div>
       <p>{message.content}</p>
-      {message.attachments.length > 0 && (
+      {(message.attachments || []).length > 0 && (
         <div className="mt-2 space-y-2">
-          {message.attachments.map((attachment) => (
+          {(message.attachments || []).map((attachment) => (
             <div key={attachment.id} className="flex items-center bg-gray-100 p-2 rounded-md">
               <a href={attachment.url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
                 {attachment.name}
@@ -68,7 +68,7 @@ export const MessageComponent = ({
         </div>
       )}
       <div className="mt-1 flex items-center space-x-2">
-        {message.reactions.map(({ emoji, count, users = [] }: Reaction) => {
+        {(message.reactions || []).map(({ emoji, count, users = [] }: Reaction) => {
           const hasReacted = users.includes(currentUserId)
           return (
             <Button

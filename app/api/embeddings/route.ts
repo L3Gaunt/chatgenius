@@ -1,4 +1,5 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import OpenAI from 'openai'
@@ -7,7 +8,19 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
 
-// POST /api/embeddings - Add embeddings to a message
+// Create a Supabase client with the service role key
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+)
+
+// POST /api/embeddings - Add embeddings to messages that don't have them
 export async function POST(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
@@ -18,39 +31,71 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { messageId } = await request.json()
-    
-    // Get the message content
-    const { data: message, error: messageError } = await supabase
+    // Use the admin client for all database operations
+    // First, mark unembedded messages as in progress
+    const { data: messages, error: markError } = await supabaseAdmin
       .from('messages')
-      .select('content')
-      .eq('id', messageId)
-      .single()
+      .update({ is_embedding_in_progress: true })
+      .is('embedding', null)
+      .eq('is_embedding_in_progress', false)
+      .select('id, content')
+      .returns<{ id: string, content: string }[]>()
 
-    if (messageError || !message) {
-      return NextResponse.json({ error: 'Message not found' }, { status: 404 })
+    if (markError) {
+      console.error('Error marking messages:', markError)
+      return NextResponse.json({ error: 'Failed to mark messages' }, { status: 500 })
     }
 
-    // Generate embeddings using OpenAI
-    const embeddingResponse = await openai.embeddings.create({
-      model: "text-embedding-3-small",
-      input: message.content,
-      encoding_format: "float"
+    if (!messages || messages.length === 0) {
+      return NextResponse.json({ message: 'No messages to embed' })
+    }
+
+    // Process each message
+    const results = await Promise.all(messages.map(async (message) => {
+      try {
+        // Generate embeddings using OpenAI
+        const embeddingResponse = await openai.embeddings.create({
+          model: "text-embedding-3-small",
+          input: message.content,
+          encoding_format: "float"
+        })
+
+        const embedding = embeddingResponse.data[0].embedding
+
+        // Update the message with embeddings using admin client
+        const { error: updateError } = await supabaseAdmin
+          .from('messages')
+          .update({ 
+            embedding,
+            is_embedding_in_progress: false 
+          })
+          .eq('id', message.id)
+
+        if (updateError) {
+          console.error(`Failed to update message ${message.id}:`, updateError)
+          return { id: message.id, success: false }
+        }
+
+        return { id: message.id, success: true }
+      } catch (error) {
+        console.error(`Error processing message ${message.id}:`, error)
+        // Reset the in_progress flag on error using admin client
+        await supabaseAdmin
+          .from('messages')
+          .update({ is_embedding_in_progress: false })
+          .eq('id', message.id)
+        return { id: message.id, success: false }
+      }
+    }))
+
+    const successCount = results.filter(r => r.success).length
+    const failureCount = results.filter(r => !r.success).length
+
+    return NextResponse.json({ 
+      processed: results.length,
+      successful: successCount,
+      failed: failureCount
     })
-
-    const embedding = embeddingResponse.data[0].embedding
-
-    // Update the message with embeddings
-    const { error: updateError } = await supabase
-      .from('messages')
-      .update({ embedding })
-      .eq('id', messageId)
-
-    if (updateError) {
-      return NextResponse.json({ error: 'Failed to update message embeddings' }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error in POST /api/embeddings:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

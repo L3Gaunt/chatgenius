@@ -8,6 +8,7 @@ DROP POLICY IF EXISTS "Attachments are publicly accessible" ON storage.objects;
 DROP POLICY IF EXISTS "Users can upload attachments" ON storage.objects;
 DROP POLICY IF EXISTS "Users can delete their own attachments" ON storage.objects;
 DROP POLICY IF EXISTS "Postgres can delete objects" ON storage.objects;
+DROP POLICY IF EXISTS "Users can create their own profile" ON public.profiles;
 
 -- Drop existing tables (in correct order to handle dependencies)
 DROP TABLE IF EXISTS public.reactions CASCADE;
@@ -104,28 +105,29 @@ CREATE OR REPLACE FUNCTION search_messages(
   match_count int
 )
 RETURNS TABLE (
-  id UUID,
-  content TEXT,
-  channel_id UUID,
+  message_id UUID,
+  message_content TEXT,
+  ...
   user_id UUID,
-  similarity float
-)
-LANGUAGE plpgsql
-AS $$
+  username TEXT,
+  ...
+) AS $$
 BEGIN
   RETURN QUERY
-  SELECT
-    messages.id,
-    messages.content,
-    messages.channel_id,
-    messages.user_id,
-    1 - (messages.embedding <=> query_embedding) as similarity
-  FROM messages
-  WHERE messages.embedding IS NOT NULL  -- Only search messages with embeddings
-  ORDER BY messages.embedding <=> query_embedding  -- Order by similarity
-  LIMIT match_count;
+    SELECT
+      m.id AS message_id,
+      m.content AS message_content,
+      ...
+      p.id AS user_id,
+      p.username,
+      ...
+    FROM messages m
+    JOIN profiles p ON m.user_id = p.id
+    WHERE m.embedding IS NOT NULL
+    ORDER BY m.embedding <=> query_embedding
+    LIMIT match_count;
 END;
-$$;
+$$ LANGUAGE plpgsql;
 
 -- Grant execute permission on the function
 GRANT EXECUTE ON FUNCTION search_messages TO authenticated;
@@ -253,6 +255,10 @@ CREATE POLICY "Users can add reactions to visible messages"
     )
   );
 
+CREATE POLICY "Users can delete their own reactions"
+  ON public.reactions FOR DELETE
+  USING (user_id = auth.uid());
+
 -- Enable realtime for all tables
 ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
 ALTER PUBLICATION supabase_realtime ADD TABLE channels;
@@ -354,6 +360,11 @@ CREATE TRIGGER delete_message_attachments_trigger
   BEFORE DELETE ON public.messages
   FOR EACH ROW
   EXECUTE FUNCTION delete_message_attachments();
+
+-- Allow users to insert (create) their own profiles.
+CREATE POLICY "Users can create their own profile"
+  ON public.profiles FOR INSERT
+  WITH CHECK (auth.uid() = id);
 
 -- Grant necessary permissions
 GRANT USAGE ON SCHEMA storage TO postgres, authenticated;
