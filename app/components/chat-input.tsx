@@ -41,22 +41,16 @@ export function ChatInput({ onSendMessage, replyingTo, onCancelReply }: ChatInpu
       try {
         const messageId = await onSendMessage(message.trim(), attachments)
         if (messageId) {
-          // Generate embeddings for the message
-          try {
-            const response = await fetch('/api/embeddings', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ messageId }),
-            })
-
-            if (!response.ok) {
-              console.error('Failed to generate embeddings:', await response.text())
-            }
-          } catch (error) {
+          // Generate embeddings for the message in the background
+          fetch('/api/embeddings', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ messageId }),
+          }).catch(error => {
             console.error('Error generating embeddings:', error)
-          }
+          })
         }
         setMessage('')
         setAttachments([])
