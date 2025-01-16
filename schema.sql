@@ -1,35 +1,6 @@
 -- Supabase database schema for ChatGenius
-
--- Enable vector extension
-CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
-
--- Drop existing storage policies
-DROP POLICY IF EXISTS "Attachments are publicly accessible" ON storage.objects;
-DROP POLICY IF EXISTS "Users can upload attachments" ON storage.objects;
-DROP POLICY IF EXISTS "Users can delete their own attachments" ON storage.objects;
-DROP POLICY IF EXISTS "Postgres can delete objects" ON storage.objects;
-
--- Drop existing tables (in correct order to handle dependencies)
-DROP TABLE IF EXISTS public.reactions CASCADE;
-DROP TABLE IF EXISTS public.messages CASCADE;
-DROP TABLE IF EXISTS public.channel_users CASCADE;
-DROP TABLE IF EXISTS public.channels CASCADE;
-DROP TABLE IF EXISTS public.profiles CASCADE;
-
 -- Drop existing functions
 DROP FUNCTION IF EXISTS public.handle_updated_at CASCADE;
-DROP FUNCTION IF EXISTS public.search_messages CASCADE;
-DROP FUNCTION IF EXISTS public.toggle_reaction CASCADE;
-DROP FUNCTION IF EXISTS public.delete_message_attachments CASCADE;
-
--- 1) Profiles table (extends Supabase Auth users)
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
-  username TEXT UNIQUE NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 -- Add a trigger to update updated_at
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
 RETURNS TRIGGER AS $$
@@ -39,16 +10,62 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- 1) Profiles table (extends Supabase Auth users)
+DROP TABLE IF EXISTS public.profiles CASCADE;
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DROP FUNCTION IF EXISTS public.delete_message_attachments CASCADE;
+
 CREATE TRIGGER profiles_updated_at
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_updated_at();
 
--- 2) Channels table
+-- Row Level Security (RLS) Policies
+-- Profiles: Users can read all profiles but only update their own
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Profiles are viewable by authenticated users"
+  ON public.profiles FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Users can update their own profile"
+  ON public.profiles FOR UPDATE
+  USING (auth.uid() = id);
+
+-- Create a function to handle user creation
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, username)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'username', 'No name given')
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger the function every time a user is created
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
+
+
+-- CHANNELS
+DROP TABLE IF EXISTS public.channels CASCADE;
 CREATE TABLE IF NOT EXISTS public.channels (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT UNIQUE NOT NULL,
-  type TEXT NOT NULL DEFAULT 'public',     -- 'public', 'private', 'direct'
+  type TEXT NOT NULL DEFAULT 'public',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -63,7 +80,38 @@ CREATE TRIGGER channels_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_updated_at();
 
--- 3) Channel membership table
+ALTER TABLE public.channels ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public channels are viewable by everyone"
+  ON public.channels FOR SELECT
+  USING (type = 'public' OR EXISTS (
+    SELECT 1 FROM public.channel_users
+    WHERE channel_users.channel_id = channels.id
+    AND channel_users.user_id = auth.uid()
+  ));
+
+-- Allow users to create channels
+CREATE POLICY "Users can create channels"
+  ON public.channels FOR INSERT
+  WITH CHECK (auth.role() = 'authenticated');
+
+-- Prevent deletion of the general channel
+CREATE POLICY "General channel cannot be deleted"
+  ON public.channels FOR DELETE
+  USING (name != 'general');
+
+-- Allow deletion of other channels
+CREATE POLICY "Users can delete non-general channels"
+  ON public.channels FOR DELETE
+  USING (name != 'general' AND type = 'public');
+
+ALTER PUBLICATION supabase_realtime ADD TABLE channels;
+
+
+
+
+-- CHANNEL_USERS (channel membership)
+DROP TABLE IF EXISTS public.channel_users CASCADE;
 CREATE TABLE IF NOT EXISTS public.channel_users (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   channel_id UUID NOT NULL REFERENCES public.channels (id) ON DELETE CASCADE,
@@ -72,7 +120,22 @@ CREATE TABLE IF NOT EXISTS public.channel_users (
   UNIQUE (channel_id, user_id)
 );
 
--- 4) Messages table
+-- Channel Users: Members can view their channel memberships
+ALTER TABLE public.channel_users ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their channel memberships"
+  ON public.channel_users FOR SELECT
+  USING (user_id = auth.uid());
+
+ALTER PUBLICATION supabase_realtime ADD TABLE channel_users;
+
+
+
+-- MESSAGES (and searching)
+-- Enable vector extension
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
+
+DROP TABLE IF EXISTS public.messages CASCADE;
 CREATE TABLE IF NOT EXISTS public.messages (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   channel_id UUID NOT NULL REFERENCES public.channels (id) ON DELETE CASCADE,
@@ -101,6 +164,8 @@ CREATE INDEX IF NOT EXISTS messages_embedding_progress_idx
 ON public.messages(is_embedding_in_progress)
 WHERE is_embedding_in_progress = true;
 
+
+DROP FUNCTION IF EXISTS public.search_messages CASCADE;
 -- Create a function to search messages by similarity
 CREATE OR REPLACE FUNCTION search_messages(
   query_embedding vector(1536),
@@ -140,7 +205,53 @@ $$ LANGUAGE plpgsql;
 -- Grant execute permission on the function
 GRANT EXECUTE ON FUNCTION search_messages TO authenticated;
 
--- 5) Reactions table
+-- Messages: Users can view messages in channels they're members of
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+
+-- Helper function to check if a user can view a message
+CREATE OR REPLACE FUNCTION can_view_message(message_id_param UUID, user_id_param UUID) 
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.messages m
+    WHERE m.id = message_id_param
+    AND (
+      m.channel_id IN (
+        SELECT channel_id FROM public.channel_users
+        WHERE user_id = user_id_param
+      ) OR EXISTS (
+        SELECT 1 FROM public.channels
+        WHERE channels.id = m.channel_id
+        AND channels.type = 'public'
+      )
+    )
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE POLICY "Users can view messages in their channels"
+  ON public.messages FOR SELECT
+  USING (can_view_message(id, auth.uid()));
+
+CREATE POLICY "Users can insert messages in their channels"
+  ON public.messages FOR INSERT
+  WITH CHECK (
+    user_id = auth.uid() AND  -- Ensure the message creator is the authenticated user
+    can_view_message(id, auth.uid())
+  );
+
+CREATE POLICY "Users can only delete their own messages"
+  ON public.messages FOR DELETE
+  USING (user_id = auth.uid());
+
+ALTER TABLE public.messages REPLICA IDENTITY FULL;
+ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+
+
+
+
+-- REACTIONS
+DROP TABLE IF EXISTS public.reactions CASCADE;
 CREATE TABLE IF NOT EXISTS public.reactions (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   message_id UUID NOT NULL REFERENCES public.messages (id) ON DELETE CASCADE,
@@ -150,139 +261,21 @@ CREATE TABLE IF NOT EXISTS public.reactions (
   UNIQUE (message_id, user_id, emoji)  -- each user can react with a specific emoji only once
 );
 
--- Row Level Security (RLS) Policies
--- Profiles: Users can read all profiles but only update their own
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Profiles are viewable by everyone"
-  ON public.profiles FOR SELECT
-  USING (true);
 
-CREATE POLICY "Users can update their own profile"
-  ON public.profiles FOR UPDATE
-  USING (auth.uid() = id);
-
--- Channels: Public channels are viewable by everyone, private channels only by members
-ALTER TABLE public.channels ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Public channels are viewable by everyone"
-  ON public.channels FOR SELECT
-  USING (type = 'public' OR EXISTS (
-    SELECT 1 FROM public.channel_users
-    WHERE channel_users.channel_id = channels.id
-    AND channel_users.user_id = auth.uid()
-  ));
-
--- Allow users to create channels
-CREATE POLICY "Users can create channels"
-  ON public.channels FOR INSERT
-  WITH CHECK (true);
-
--- Prevent deletion of the general channel
-CREATE POLICY "General channel cannot be deleted"
-  ON public.channels FOR DELETE
-  USING (name != 'general');
-
--- Allow deletion of other channels
-CREATE POLICY "Users can delete non-general channels"
-  ON public.channels FOR DELETE
-  USING (name != 'general' AND type = 'public');
-
--- Channel Users: Members can view their channel memberships
-ALTER TABLE public.channel_users ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view their channel memberships"
-  ON public.channel_users FOR SELECT
-  USING (user_id = auth.uid());
-
--- Messages: Users can view messages in channels they're members of
-ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view messages in their channels"
-  ON public.messages FOR SELECT
-  USING (
-    channel_id IN (
-      SELECT channel_id FROM public.channel_users
-      WHERE user_id = auth.uid()
-    ) OR 
-    EXISTS (
-      SELECT 1 FROM public.channels
-      WHERE channels.id = messages.channel_id
-      AND channels.type = 'public'
-    )
-  );
-
-CREATE POLICY "Users can insert messages in their channels"
-  ON public.messages FOR INSERT
-  WITH CHECK (
-    user_id = auth.uid() AND  -- Ensure the message creator is the authenticated user
-    channel_id IN (
-      SELECT channel_id FROM public.channel_users
-      WHERE user_id = auth.uid()
-    ) OR
-    EXISTS (
-      SELECT 1 FROM public.channels
-      WHERE channels.id = channel_id
-      AND channels.type = 'public'
-    )
-  );
-
-CREATE POLICY "Users can only delete their own messages"
-  ON public.messages FOR DELETE
-  USING (user_id = auth.uid());
-
--- Reactions: Users can view and add reactions to messages they can see
 ALTER TABLE public.reactions ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view reactions on visible messages"
   ON public.reactions FOR SELECT
-  USING (
-    message_id IN (
-      SELECT id FROM public.messages
-      WHERE channel_id IN (
-        SELECT channel_id FROM public.channel_users
-        WHERE user_id = auth.uid()
-      ) OR channel_id IN (
-        SELECT id FROM public.channels
-        WHERE type = 'public'
-      )
-    )
-  );
+  USING (can_view_message(message_id, auth.uid()));
 
 CREATE POLICY "Users can add reactions to visible messages"
   ON public.reactions FOR INSERT
-  WITH CHECK (
-    message_id IN (
-      SELECT id FROM public.messages
-      WHERE channel_id IN (
-        SELECT channel_id FROM public.channel_users
-        WHERE user_id = auth.uid()
-      ) OR channel_id IN (
-        SELECT id FROM public.channels
-        WHERE type = 'public'
-      )
-    )
-  );
+  WITH CHECK (can_view_message(message_id, auth.uid()));
 
 CREATE POLICY "Users can delete their own reactions"
   ON public.reactions FOR DELETE
   USING (user_id = auth.uid());
-
--- Enable realtime for all tables
-ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
-ALTER PUBLICATION supabase_realtime ADD TABLE channels;
-ALTER PUBLICATION supabase_realtime ADD TABLE channel_users;
-ALTER PUBLICATION supabase_realtime ADD TABLE messages;
-ALTER PUBLICATION supabase_realtime ADD TABLE reactions;
-
--- Grant permissions (moved to end)
-GRANT USAGE ON SCHEMA public TO authenticated;
-GRANT USAGE ON SCHEMA public TO service_role;
-
--- Grant table permissions
-GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
-GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
 
 -- Create function to toggle reactions
 CREATE OR REPLACE FUNCTION toggle_reaction(
@@ -308,8 +301,16 @@ $$ LANGUAGE plpgsql;
 -- Grant execute permission on the function
 GRANT EXECUTE ON FUNCTION toggle_reaction TO authenticated;
 
-ALTER TABLE public.reactions REPLICA IDENTITY FULL;
-ALTER TABLE public.messages REPLICA IDENTITY FULL;
+ALTER PUBLICATION supabase_realtime ADD TABLE reactions;
+ALTER TABLE public.reactions REPLICA IDENTITY FULL; -- for realtime updates
+
+
+-- STORAGE
+-- Drop existing storage policies
+DROP POLICY IF EXISTS "Attachments are publicly accessible" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Postgres can delete objects" ON storage.objects;
 
 -- Create storage bucket for attachments
 INSERT INTO storage.buckets (id, name, public)
@@ -340,7 +341,3 @@ CREATE POLICY "Postgres can delete objects"
 ON storage.objects FOR DELETE
 TO postgres
 USING (true);
-
--- Grant necessary permissions
-GRANT USAGE ON SCHEMA storage TO postgres, authenticated;
-GRANT ALL ON storage.objects TO postgres, authenticated;
