@@ -106,3 +106,31 @@ To get started:
 - Direct messaging
 - Responsive design
 - Dark mode support
+
+## Tech Stack
+
+### Frontend
+- **Next.js 14** - React framework with App Router for server-side rendering and routing
+- **Tailwind CSS** - Utility-first CSS framework for styling
+- **Shadcn/ui** - Reusable component library built on Radix UI
+- **React Query** - Data fetching and state management
+- **TypeScript** - Type-safe JavaScript
+
+### Backend
+- **Next.js API Routes** - Serverless API endpoints
+- **Supabase** - PostgreSQL database with real-time capabilities
+  - Stores chat messages and embeddings
+  - Handles authentication
+- **OpenAI API** 
+  - GPT-4 for chat completions
+  - Text embeddings for semantic search
+- **Vercel AI SDK** - Streaming API responses
+- **Edge Runtime** - For optimal performance with AI streaming
+
+## Key Features
+- Real-time chat with AI assistant
+- Message history persistence
+- Semantic search across past conversations
+- Responsive design for mobile and desktop
+- Dark/light theme support
+- TypeScript for type safety
