@@ -26,7 +26,6 @@ export interface Message {
   user_id: string | null;
   parent_message_id: string | null;
   attachments: { id: string; name: string; url: string; }[];
-  timestamp: string;
   created_at: string;
   updated_at: string;
   user: DatabaseProfile;

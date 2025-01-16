@@ -80,7 +80,6 @@ CREATE TABLE IF NOT EXISTS public.messages (
   parent_message_id UUID REFERENCES public.messages (id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   attachments JSONB DEFAULT '[]',  -- For storing file metadata directly
-  timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   embedding vector(1536),
