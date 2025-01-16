@@ -113,7 +113,6 @@ To get started:
 - **Next.js 14** - React framework with App Router for server-side rendering and routing
 - **Tailwind CSS** - Utility-first CSS framework for styling
 - **Shadcn/ui** - Reusable component library built on Radix UI
-- **React Query** - Data fetching and state management
 - **TypeScript** - Type-safe JavaScript
 
 ### Backend
@@ -124,8 +123,6 @@ To get started:
 - **OpenAI API** 
   - GPT-4 for chat completions
   - Text embeddings for semantic search
-- **Vercel AI SDK** - Streaming API responses
-- **Edge Runtime** - For optimal performance with AI streaming
 
 ## Key Features
 - Real-time chat with AI assistant
