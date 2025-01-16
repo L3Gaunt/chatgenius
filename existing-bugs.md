@@ -1,3 +1,4 @@
++ means done
 TODO
 necessary:
 + replies
@@ -5,13 +6,13 @@ necessary:
 + need to be able to log out after login
 + forgot password functionality
 + direct message functionality
-? presence status
++ presence status
 + file upload
 
 - check for inconsistencies and duplicate definitions
 
 nice to have:
-- files deleted in bucket when deleting message <- delete files with storage api instead of edge function
++ files deleted in bucket when deleting message <- delete files with storage api instead of edge function
 - search over all channels
 - integrate auth with google+github
 - delete account functionality
