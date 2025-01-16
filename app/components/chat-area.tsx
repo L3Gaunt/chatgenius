@@ -11,6 +11,7 @@ import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supab
 import { User, Hash, X } from 'lucide-react'
 import { Message, transformDatabaseMessage } from "../types/message"
 import { Button } from "@/components/ui/button"
+import { toast } from 'sonner'
 
 type DatabaseMessage = Database['public']['Tables']['messages']['Row']
 type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
@@ -575,18 +576,17 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
   }
 
   const handleDeleteMessage = async (messageId: string) => {
-    const { error } = await supabase
-      .from('messages')
-      .delete()
-      .eq('id', messageId)
-
-    if (error) {
-      console.error('Error deleting message:', {
-        error,
-        details: error.details,
-        message: error.message,
-        messageId
+    try {
+      const response = await fetch(`/api/messages/${messageId}`, {
+        method: 'DELETE',
       })
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete message: ${response.statusText}`)
+      }
+    } catch (error) {
+      console.error('Error deleting message:', error)
+      toast.error('Failed to delete message. Please try again.')
     }
   }
 

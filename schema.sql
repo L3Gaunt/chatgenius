@@ -216,6 +216,7 @@ CREATE POLICY "Users can view messages in their channels"
 CREATE POLICY "Users can insert messages in their channels"
   ON public.messages FOR INSERT
   WITH CHECK (
+    user_id = auth.uid() AND  -- Ensure the message creator is the authenticated user
     channel_id IN (
       SELECT channel_id FROM public.channel_users
       WHERE user_id = auth.uid()
@@ -340,40 +341,6 @@ CREATE POLICY "Postgres can delete objects"
 ON storage.objects FOR DELETE
 TO postgres
 USING (true);
-
--- Create a function to delete files from storage when a message is deleted
-CREATE OR REPLACE FUNCTION delete_message_attachments()
-RETURNS TRIGGER AS $$
-DECLARE
-  attachment JSONB;
-BEGIN
-  -- Loop through each attachment in the deleted message
-  FOR attachment IN SELECT * FROM jsonb_array_elements(OLD.attachments)
-  LOOP
-    -- The attachment->>'id' contains the full path including channel_id/filename
-    -- Delete the file from storage by deleting from storage.objects table
-    DELETE FROM storage.objects 
-    WHERE bucket_id = 'attachments' 
-    AND name = attachment->>'id';
-  END LOOP;
-  
-  RETURN OLD;
-END;
-$$ LANGUAGE plpgsql;
-
--- Drop existing trigger if it exists
-DROP TRIGGER IF EXISTS delete_message_attachments_trigger ON public.messages;
-
--- Create trigger to automatically delete files when a message is deleted
-CREATE TRIGGER delete_message_attachments_trigger
-  BEFORE DELETE ON public.messages
-  FOR EACH ROW
-  EXECUTE FUNCTION delete_message_attachments();
-
--- Allow users to insert (create) their own profiles.
-CREATE POLICY "Users can create their own profile"
-  ON public.profiles FOR INSERT
-  WITH CHECK (auth.uid() = id);
 
 -- Grant necessary permissions
 GRANT USAGE ON SCHEMA storage TO postgres, authenticated;
