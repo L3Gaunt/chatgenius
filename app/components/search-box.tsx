@@ -6,9 +6,10 @@ import { Message } from "../types/message"
 
 interface SearchBoxProps {
   onSearch: (messages: Message[]) => void;
+  onFocus?: () => void;
 }
 
-export function SearchBox({ onSearch }: SearchBoxProps) {
+export function SearchBox({ onSearch, onFocus }: SearchBoxProps) {
   const [query, setQuery] = useState('')
   const [isSearching, setIsSearching] = useState(false)
 
@@ -41,6 +42,7 @@ export function SearchBox({ onSearch }: SearchBoxProps) {
         onChange={(e) => setQuery(e.target.value)}
         className="flex-grow"
         disabled={isSearching}
+        onFocus={onFocus}
       />
       <Button type="submit" size="icon" disabled={isSearching}>
         <Search className="h-4 w-4" />

@@ -12,6 +12,7 @@ import { User, Hash, X } from 'lucide-react'
 import { Message, transformDatabaseMessage } from "../types/message"
 import { Button } from "@/components/ui/button"
 import { toast } from 'sonner'
+import { SearchResults } from './search-results'
 
 type DatabaseMessage = Database['public']['Tables']['messages']['Row']
 type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
@@ -35,6 +36,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
 
   // Add effect to get current user
   useEffect(() => {
@@ -592,9 +594,8 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
 
   const handleSearch = (searchMessages: Message[]) => {
     setSearchResults(searchMessages)
+    setIsSearchOpen(true)
   }
-
-  const displayMessages = searchResults.length > 0 ? searchResults : messages
 
   const scrollToBottom = () => {
     if (scrollAreaRef.current) {
@@ -647,34 +648,45 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
             )}
           </h2>
         </div>
-        <SearchBox onSearch={handleSearch} />
+        <SearchBox 
+          onSearch={handleSearch}
+          onFocus={() => setIsSearchOpen(true)}
+        />
       </div>
-      <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
-        {searchResults.length > 0 && (
-          <div className="mb-4 p-2 bg-gray-100 dark:bg-gray-800 rounded">
-            <h3 className="font-semibold mb-2">Search Results</h3>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setSearchResults([])}
-              className="mb-2"
-            >
-              Clear Search
-            </Button>
-          </div>
-        )}
-        {displayMessages.map((message) => (
-          <MessageComponent 
-            key={message.id} 
-            message={message}
-            currentUserId={currentUserId}
-            onDelete={handleDeleteMessage}
-            onReaction={handleReaction}
-            onReply={handleReply}
+      <div className="flex-1 flex overflow-hidden">
+        <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
+          {messages.map((message) => (
+            <MessageComponent 
+              key={message.id} 
+              message={message}
+              currentUserId={currentUserId}
+              onDelete={handleDeleteMessage}
+              onReaction={handleReaction}
+              onReply={handleReply}
+            />
+          ))}
+          <div ref={messagesEndRef} />
+        </ScrollArea>
+        {isSearchOpen && (
+          <SearchResults 
+            results={searchResults.map(msg => ({
+              type: 'message',
+              id: parseInt(msg.id),
+              user: msg.user?.username || 'Unknown',
+              content: msg.content,
+              timestamp: new Date(msg.created_at).toLocaleTimeString([], { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+              })
+            }))}
+            isOpen={isSearchOpen}
+            onClose={() => {
+              setIsSearchOpen(false)
+              setSearchResults([])
+            }}
           />
-        ))}
-        <div ref={messagesEndRef} />
-      </ScrollArea>
+        )}
+      </div>
       <ChatInput 
         onSendMessage={handleSendMessage}
         replyingTo={replyingTo}

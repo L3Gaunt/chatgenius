@@ -36,7 +36,7 @@ export default function Home() {
   }
 
   return (
-    <main className="flex h-screen">
+    <main className="flex h-screen overflow-hidden">
       <Sidebar 
         onChannelSelect={handleChannelSelect}
         onDirectMessageSelect={handleDirectMessageSelect}
