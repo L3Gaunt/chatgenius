@@ -71,7 +71,6 @@ export function SearchResults({ results, onClose, isOpen, currentUserId, onDirec
                   onDelete={handleDelete}
                   onReaction={handleReaction}
                   onReply={handleReply}
-                  isSearchResult={true}
                 />
               ))}
             </div>
