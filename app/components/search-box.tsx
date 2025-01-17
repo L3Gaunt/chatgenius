@@ -3,14 +3,13 @@ import { Search } from 'lucide-react'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Message } from "../types/message"
-import { FileSearchResult, PersonSearchResult } from "../types/search"
+import { FileSearchResult } from "../types/search"
 
 interface SearchBoxProps {
-  onSearch: (results: (Message | FileSearchResult | PersonSearchResult)[]) => void;
-  onFocus?: () => void;
+  onSearch: (results: { messages: Message[]; files: FileSearchResult[] }) => void
 }
 
-export function SearchBox({ onSearch, onFocus }: SearchBoxProps) {
+export function SearchBox({ onSearch }: SearchBoxProps) {
   const [query, setQuery] = useState('')
   const [isSearching, setIsSearching] = useState(false)
 
@@ -20,15 +19,16 @@ export function SearchBox({ onSearch, onFocus }: SearchBoxProps) {
 
     setIsSearching(true)
     try {
+      // Expecting our /api/embeddings/search route to return { messages, files }.
       const response = await fetch(`/api/embeddings/search?query=${encodeURIComponent(query)}`)
       if (!response.ok) {
-        throw new Error('Search failed')
+        throw new Error('Search failed.')
       }
 
-      const messages = await response.json()
-      onSearch(messages)
+      const { messages = [], files = [] } = await response.json()
+      onSearch({ messages, files })
     } catch (error) {
-      console.error('Error searching messages:', error)
+      console.error('Error searching:', error)
     } finally {
       setIsSearching(false)
     }
@@ -38,12 +38,11 @@ export function SearchBox({ onSearch, onFocus }: SearchBoxProps) {
     <form onSubmit={handleSubmit} className="flex items-center space-x-2">
       <Input
         type="text"
-        placeholder="Search messages..."
+        placeholder="Search messages or files..."
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         className="flex-grow"
         disabled={isSearching}
-        onFocus={onFocus}
       />
       <Button type="submit" size="icon" disabled={isSearching}>
         <Search className="h-4 w-4" />

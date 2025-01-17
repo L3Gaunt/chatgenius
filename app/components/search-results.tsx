@@ -5,28 +5,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { Message } from "../types/message"
 import { MessageComponent } from './message-component'
-
-interface FileSearchResult {
-  type: 'file';
-  id: number;
-  name: string;
-  fileType: string;
-  sharedBy: string;
-  sharedAt: string;
-}
-
-interface PersonSearchResult {
-  type: 'person';
-  id: number;
-  name: string;
-  status: 'online' | 'offline' | 'away';
-  title: string;
-}
-
-type SearchResult = Message | FileSearchResult | PersonSearchResult;
+import { FileSearchResult, PersonSearchResult, SearchResults as SearchResultsType } from '../types/search'
 
 interface SearchResultsProps {
-  results: SearchResult[];
+  results: SearchResultsType;
   onClose: () => void;
   isOpen: boolean;
   currentUserId?: string;
@@ -35,9 +17,26 @@ interface SearchResultsProps {
 export function SearchResults({ results, onClose, isOpen, currentUserId }: SearchResultsProps) {
   if (!isOpen) return null;
 
-  const messageResults = results.filter((r): r is Message => 'content' in r && 'user' in r);
-  const fileResults = results.filter((r): r is FileSearchResult => 'type' in r && r.type === 'file');
-  const personResults = results.filter((r): r is PersonSearchResult => 'type' in r && r.type === 'person');
+  // Add defensive checks and logging
+  console.log('Received search results:', results);
+  
+  const messages = results?.messages || [];
+  const files = results?.files || [];
+  const people = results?.people || [];
+  
+  console.log('Processed results - messages:', messages.length, 'files:', files.length, 'people:', people.length);
+
+  const handleDelete = () => {
+    // Handle message deletion
+  };
+
+  const handleReaction = () => {
+    // Handle message reaction
+  };
+
+  const handleReply = () => {
+    // Handle message reply
+  };
 
   return (
     <div className="w-80 border-l bg-background flex flex-col h-full">
@@ -49,25 +48,28 @@ export function SearchResults({ results, onClose, isOpen, currentUserId }: Searc
         <TabsList className="justify-start p-4 border-b">
           <TabsTrigger value="messages" className="flex items-center">
             <MessageSquare className="w-4 h-4 mr-2" />
-            Messages ({messageResults.length})
+            Messages ({messages.length})
           </TabsTrigger>
           <TabsTrigger value="files" className="flex items-center">
             <FileText className="w-4 h-4 mr-2" />
-            Files ({fileResults.length})
+            Files ({files.length})
           </TabsTrigger>
           <TabsTrigger value="people" className="flex items-center">
             <User className="w-4 h-4 mr-2" />
-            People ({personResults.length})
+            People ({people.length})
           </TabsTrigger>
         </TabsList>
         <TabsContent value="messages" className="flex-1 p-0">
           <ScrollArea className="h-[calc(100vh-10rem)]">
             <div className="p-4 space-y-2">
-              {messageResults.map((message) => (
+              {messages.map((message) => (
                 <MessageComponent
                   key={message.id}
                   message={message}
-                  currentUserId={currentUserId}
+                  currentUserId={currentUserId || ''}
+                  onDelete={handleDelete}
+                  onReaction={handleReaction}
+                  onReply={handleReply}
                 />
               ))}
             </div>
@@ -76,7 +78,7 @@ export function SearchResults({ results, onClose, isOpen, currentUserId }: Searc
         <TabsContent value="files" className="flex-1 p-0">
           <ScrollArea className="h-[calc(100vh-10rem)]">
             <div className="p-4 space-y-2">
-              {fileResults.map((result) => (
+              {files.map((result) => (
                 <Card key={result.id}>
                   <CardContent className="p-4">
                     <div className="flex items-center">
@@ -97,7 +99,7 @@ export function SearchResults({ results, onClose, isOpen, currentUserId }: Searc
         <TabsContent value="people" className="flex-1 p-0">
           <ScrollArea className="h-[calc(100vh-10rem)]">
             <div className="p-4 space-y-2">
-              {personResults.map((result) => (
+              {people.map((result) => (
                 <Card key={result.id}>
                   <CardContent className="p-4">
                     <div className="flex items-center">

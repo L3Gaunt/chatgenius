@@ -8,11 +8,12 @@ import { ChatInput } from './chat-input'
 import { supabase } from '@/lib/supabase'
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { User, Hash, X } from 'lucide-react'
-import { Message } from "@/types/message"
+import { Message } from "@/app/types/message"
 import { Button } from "@/components/ui/button"
 import { toast } from 'sonner'
 import { SearchResults } from './search-results'
-import { DatabaseMessage, DatabaseProfile, Channel, DatabaseReaction } from "@/types/database"
+import { DatabaseMessage, DatabaseProfile, Channel, DatabaseReaction } from "@/app/types/database"
+import { FileSearchResult } from "@/app/types/search"
 
 type MessageRow = DatabaseMessage
 type ReactionRow = DatabaseReaction
@@ -22,18 +23,25 @@ interface ChatAreaProps {
   userId?: string;
 }
 
+interface FileResult {
+  id: number
+  file_name: string
+  file_type?: string
+}
+
 export function ChatArea({ channelId, userId }: ChatAreaProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [channel, setChannel] = useState<Channel | null>(null)
   const [dmUser, setDmUser] = useState<DatabaseProfile | null>(null)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
-  const [searchResults, setSearchResults] = useState<Message[]>([])
+  const [searchResults, setSearchResults] = useState<{ messages: Message[]; files: FileSearchResult[] }>({ messages: [], files: [] })
   const [currentUserId, setCurrentUserId] = useState<string>('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [shouldScrollToBottom, setShouldScrollToBottom] = useState(true)
+  const [noResultsMessage, setNoResultsMessage] = useState("")
 
   // Add effect to get current user
   useEffect(() => {
@@ -593,9 +601,18 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
     }
   }
 
-  const handleSearch = (searchMessages: Message[]) => {
-    setSearchResults(searchMessages)
-    setIsSearchOpen(true)
+  const handleSearch = (results: { messages: Message[]; files: FileSearchResult[] }) => {
+    const { messages, files } = results
+    if (messages.length === 0 && files.length === 0) {
+      // No results
+      setNoResultsMessage("No results found")
+      setIsSearchOpen(false)
+    } else {
+      // We have results
+      setNoResultsMessage("")
+      setSearchResults(results)
+      setIsSearchOpen(true)
+    }
   }
 
   const scrollToBottom = () => {
@@ -651,10 +668,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
             )}
           </h2>
         </div>
-        <SearchBox 
-          onSearch={handleSearch}
-          onFocus={() => setIsSearchOpen(true)}
-        />
+        <SearchBox onSearch={handleSearch} />
       </div>
       <div className="flex-1 flex overflow-hidden">
         <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
@@ -670,15 +684,21 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
           ))}
           <div ref={messagesEndRef} />
         </ScrollArea>
+        {noResultsMessage && (
+          <div className="mx-4 my-2 text-sm text-red-600">
+            {noResultsMessage}
+          </div>
+        )}
         {isSearchOpen && (
           <SearchResults 
-            results={searchResults}
-            isOpen={isSearchOpen}
-            onClose={() => {
-              setIsSearchOpen(false)
-              setSearchResults([])
+            results={{
+              messages: searchResults.messages,
+              files: searchResults.files,
+              people: [] // or whatever you need
             }}
-            currentUserId={currentUserId}
+            onClose={() => setIsSearchOpen(false)}
+            isOpen={isSearchOpen}
+            currentUserId={userId ?? ''}
           />
         )}
       </div>

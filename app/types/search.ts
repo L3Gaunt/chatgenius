@@ -1,6 +1,5 @@
 export interface FileSearchResult {
-  type: 'file';
-  id: number;
+  id: string;
   name: string;
   fileType: string;
   sharedBy: string;
@@ -8,9 +7,16 @@ export interface FileSearchResult {
 }
 
 export interface PersonSearchResult {
-  type: 'person';
-  id: number;
+  id: string;
   name: string;
   status: 'online' | 'offline' | 'away';
   title: string;
+}
+
+import { Message } from "./message";
+
+export interface SearchResults {
+  messages: Message[];
+  files: FileSearchResult[];
+  people: PersonSearchResult[];
 } 
