@@ -9,7 +9,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
 
-const MAX_RESULTS = 5
+const MAX_RESULTS = 50
 
 // GET /api/embeddings/search - Search for similar messages and files
 export async function GET(request: Request) {
@@ -121,37 +121,96 @@ export async function GET(request: Request) {
       replies: row.replies || []
     }))
 
-    // Transform file rows
-    const files: FileSearchResult[] = fileRows.map((row: any) => ({
-      id: row.id,
-      name: row.file_path.split('/').pop() || '',
-      fileType: row.file_path.split('.').pop() || '',
-      sharedBy: row.username || 'Unknown',
-      sharedAt: row.created_at
-    }))
-
-    // Transform people rows with online status
-    const people: PersonSearchResult[] = uniquePeople.map((row: any) => {
-      const lastSeen = new Date(row.updated_at || 0);
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    // Transform and deduplicate file rows with rank-based scoring
+    const fileScores = new Map<string, { score: number, data: any }>();
+    fileRows.forEach((row: any, index: number) => {
+      const filePath = row.file_path;
+      const rankScore = 1 / (index + 1); // Reciprocal rank scoring
       
-      let status: 'online' | 'offline' | 'away' = 'offline';
-      if (lastSeen > fiveMinutesAgo) {
-        status = 'online';
-      } else if (lastSeen > new Date(Date.now() - 30 * 60 * 1000)) {
-        status = 'away';
+      if (fileScores.has(filePath)) {
+        // Add to existing score
+        fileScores.get(filePath)!.score += rankScore;
+      } else {
+        // Create new entry
+        fileScores.set(filePath, {
+          score: rankScore,
+          data: row
+        });
       }
-
-      return {
-        id: row.id,
-        name: row.username,
-        fullName: row.username,
-        avatarUrl: null,
-        status,
-        title: row.username,
-        lastSeenAt: row.updated_at
-      };
     });
+
+    // Convert to array and sort by score
+    const files: FileSearchResult[] = Array.from(fileScores.entries())
+      .sort((a, b) => b[1].score - a[1].score)
+      .map(([_, { data }]) => ({
+        id: data.id,
+        name: data.file_path.split('/').pop() || '',
+        fileType: data.file_path.split('.').pop() || '',
+        sharedBy: data.username || 'Unknown',
+        sharedAt: data.created_at,
+        filePath: data.file_path
+      }));
+
+    // Calculate scores for people based on message authorship and direct matches
+    const peopleScores = new Map<string, { score: number, data: any }>();
+    
+    // Score from message authorship
+    messageRows.forEach((row: any, index: number) => {
+      const userId = row.user_id;
+      const rankScore = 1 / (index + 1);
+      
+      if (peopleScores.has(userId)) {
+        peopleScores.get(userId)!.score += rankScore;
+      } else {
+        peopleScores.set(userId, {
+          score: rankScore,
+          data: {
+            id: row.user_id,
+            username: row.username,
+            updated_at: row.user_updated_at || row.updated_at
+          }
+        });
+      }
+    });
+
+    // Add scores from direct people matches
+    peopleRows.forEach((row: any, index: number) => {
+      const rankScore = 1 / (index + 1);
+      
+      if (peopleScores.has(row.id)) {
+        peopleScores.get(row.id)!.score += rankScore;
+      } else {
+        peopleScores.set(row.id, {
+          score: rankScore,
+          data: row
+        });
+      }
+    });
+
+    // Transform people rows with online status, sorted by score
+    const people: PersonSearchResult[] = Array.from(peopleScores.entries())
+      .sort((a, b) => b[1].score - a[1].score)
+      .map(([_, { data }]) => {
+        const lastSeen = new Date(data.updated_at || 0);
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        
+        let status: 'online' | 'offline' | 'away' = 'offline';
+        if (lastSeen > fiveMinutesAgo) {
+          status = 'online';
+        } else if (lastSeen > new Date(Date.now() - 30 * 60 * 1000)) {
+          status = 'away';
+        }
+
+        return {
+          id: data.id,
+          name: data.username,
+          fullName: data.username,
+          avatarUrl: null,
+          status,
+          title: data.username,
+          lastSeenAt: data.updated_at
+        };
+      });
 
     const results: SearchResults = {
       messages,

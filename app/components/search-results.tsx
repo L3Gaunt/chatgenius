@@ -84,7 +84,14 @@ export function SearchResults({ results, onClose, isOpen, currentUserId }: Searc
                     <div className="flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
                       <div>
-                        <div className="font-medium">{result.name}</div>
+                        <a 
+                          href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/attachments/${result.filePath}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium hover:underline text-blue-600"
+                        >
+                          {result.name}
+                        </a>
                         <div className="text-xs text-muted-foreground">
                           {result.fileType} • Shared by {result.sharedBy} • {new Date(result.sharedAt).toLocaleString()}
                         </div>

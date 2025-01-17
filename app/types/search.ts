@@ -4,6 +4,7 @@ export interface FileSearchResult {
   fileType: string;
   sharedBy: string;
   sharedAt: string;
+  filePath: string;
 }
 
 export interface PersonSearchResult {
