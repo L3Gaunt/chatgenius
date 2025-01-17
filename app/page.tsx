@@ -44,6 +44,7 @@ export default function Home() {
       <ChatArea 
         channelId={selectedChannelId || undefined}
         userId={selectedUserId || undefined}
+        onDirectMessageSelect={handleDirectMessageSelect}
       />
     </main>
   )

@@ -12,9 +12,10 @@ interface SearchResultsProps {
   onClose: () => void;
   isOpen: boolean;
   currentUserId?: string;
+  onDirectMessageSelect?: (userId: string) => void;
 }
 
-export function SearchResults({ results, onClose, isOpen, currentUserId }: SearchResultsProps) {
+export function SearchResults({ results, onClose, isOpen, currentUserId, onDirectMessageSelect }: SearchResultsProps) {
   if (!isOpen) return null;
 
   // Add defensive checks and logging
@@ -108,7 +109,15 @@ export function SearchResults({ results, onClose, isOpen, currentUserId }: Searc
             <div className="p-4 space-y-2">
               {people.map((result) => (
                 <Card key={result.id}>
-                  <CardContent className="p-4">
+                  <CardContent 
+                    className="p-4 cursor-pointer hover:bg-accent transition-colors"
+                    onClick={() => {
+                      if (onDirectMessageSelect) {
+                        onDirectMessageSelect(result.id);
+                        onClose();
+                      }
+                    }}
+                  >
                     <div className="flex items-center">
                       <div className="relative mr-2">
                         {result.avatarUrl ? (

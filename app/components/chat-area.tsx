@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { DatabaseMessage, DatabaseProfile, Channel, DatabaseReaction } from "@/app/types/database"
 import { SearchResults as SearchResultsType, FileSearchResult } from "@/app/types/search"
 import { SearchResults } from './search-results'
+import { useRouter } from 'next/navigation'
 
 type MessageRow = DatabaseMessage
 type ReactionRow = DatabaseReaction
@@ -21,6 +22,7 @@ type ReactionRow = DatabaseReaction
 interface ChatAreaProps {
   channelId?: string;
   userId?: string;
+  onDirectMessageSelect?: (userId: string) => void;
 }
 
 interface FileResult {
@@ -29,7 +31,7 @@ interface FileResult {
   file_type?: string
 }
 
-export function ChatArea({ channelId, userId }: ChatAreaProps) {
+export function ChatArea({ channelId, userId, onDirectMessageSelect }: ChatAreaProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [channel, setChannel] = useState<Channel | null>(null)
   const [dmUser, setDmUser] = useState<DatabaseProfile | null>(null)
@@ -42,6 +44,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [shouldScrollToBottom, setShouldScrollToBottom] = useState(true)
   const [noResultsMessage, setNoResultsMessage] = useState("")
+  const router = useRouter()
 
   // Add effect to get current user
   useEffect(() => {
@@ -694,7 +697,13 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
             results={searchResults}
             onClose={() => setIsSearchOpen(false)}
             isOpen={isSearchOpen}
-            currentUserId={userId ?? ''}
+            currentUserId={currentUserId}
+            onDirectMessageSelect={(userId) => {
+              if (userId && onDirectMessageSelect) {
+                onDirectMessageSelect(userId);
+                setIsSearchOpen(false);
+              }
+            }}
           />
         )}
       </div>
