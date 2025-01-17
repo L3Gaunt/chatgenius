@@ -72,11 +72,6 @@ export async function GET(request: Request) {
       console.error('People search error:', peopleError)
       return NextResponse.json({ error: 'Failed to search people' }, { status: 500 })
     }
-
-    // Combine and deduplicate people results
-    const combinedPeople = [...messageAuthors, ...peopleRows];
-    const uniquePeople = Array.from(new Map(combinedPeople.map(person => [person.id, person])).values());
-
     // Search file chunks
     const { data: fileRows, error: fileError } = await supabase
       .rpc('search_file_chunks', {
