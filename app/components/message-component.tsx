@@ -7,15 +7,49 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog"
 import { Message } from '../types/message'
 
-const emojis = ['👍', '❤️', '😂', '🎉', '🤔', '👀']
+interface EmojiPickerProps {
+  onEmojiSelect: (emoji: string) => void;
+}
+
+function EmojiPicker({ onEmojiSelect }: EmojiPickerProps) {
+  const [isOpen, setIsOpen] = React.useState(false)
+  const emojis = ['👍', '❤️', '😄', '🎉', '🤔', '👀']
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm">
+          <Smile size={16} />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-1">
+        <div className="flex gap-1">
+          {emojis.map(emoji => (
+            <Button
+              key={emoji}
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                onEmojiSelect(emoji)
+                setIsOpen(false)
+              }}
+            >
+              {emoji}
+            </Button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 interface MessageComponentProps {
   message: Message;
-  isReply?: boolean;
   currentUserId: string;
-  onDelete: (messageId: string) => void;
-  onReaction: (messageId: string, emoji: string) => void;
-  onReply: (message: Message) => void;
+  onDelete?: (messageId: string) => void;
+  onReaction?: (messageId: string, emoji: string) => void;
+  onReply?: (message: Message) => void;
+  isSearchResult?: boolean;
 }
 
 interface Reaction {
@@ -24,19 +58,12 @@ interface Reaction {
   users?: string[];
 }
 
-export const MessageComponent = ({ 
-  message, 
-  isReply = false,
-  currentUserId,
-  onDelete,
-  onReaction,
-  onReply
-}: MessageComponentProps) => {
+export function MessageComponent({ message, currentUserId, onDelete, onReaction, onReply, isSearchResult = false }: MessageComponentProps) {
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = React.useState(false)
   const canDelete = message.user_id === currentUserId
   
   return (
-    <div className={`mb-4 ${isReply ? 'ml-6 border-l-2 border-gray-200 pl-4' : ''}`}>
+    <div className={`mb-4 ${isSearchResult ? 'ml-6 border-l-2 border-gray-200 pl-4' : ''}`}>
       <div className="flex items-baseline justify-between">
         <div className="flex items-center">
           <span className="font-bold mr-2">{message.user.username}</span>
@@ -56,7 +83,7 @@ export const MessageComponent = ({
             }
             title="Are you sure you want to delete this message?"
             description="This action cannot be undone. This will permanently delete your message."
-            onDelete={() => onDelete(message.id)}
+            onDelete={() => onDelete?.(message.id)}
           />
         )}
       </div>
@@ -72,70 +99,30 @@ export const MessageComponent = ({
           ))}
         </div>
       )}
-      <div className="mt-1 flex items-center space-x-2">
-        {(message.reactions || []).map(({ emoji, count, users = [] }: Reaction) => {
-          const hasReacted = users.includes(currentUserId)
-          return (
-            <Button
-              key={emoji}
-              variant="ghost"
-              size="sm"
-              className={`mr-2 rounded-full px-2 py-1 text-sm transition-all ${
-                hasReacted 
-                  ? 'bg-blue-100 hover:bg-blue-200 border-2 border-blue-400 shadow-sm' 
-                  : 'bg-gray-100 hover:bg-gray-200'
-              }`}
-              onClick={() => onReaction(message.id, emoji)}
-            >
-              {emoji} {count}
-            </Button>
-          )
-        })}
-        <Popover open={isEmojiPickerOpen} onOpenChange={setIsEmojiPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="sm">
-              <Smile size={16} />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-1">
-            <div className="flex gap-1">
-              {emojis.map(emoji => (
-                <Button
-                  key={emoji}
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    onReaction(message.id, emoji)
-                    setIsEmojiPickerOpen(false)
-                  }}
-                >
-                  {emoji}
-                </Button>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-        {!isReply && (
+      {!isSearchResult && (
+        <div className="flex items-center gap-2 mt-2">
+          <EmojiPicker onEmojiSelect={(emoji) => onReaction?.(message.id, emoji)} />
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onReply(message)}
+            onClick={() => onReply?.(message)}
+            className="text-xs"
           >
-            <MessageSquare size={16} />
+            Reply
           </Button>
-        )}
-      </div>
+        </div>
+      )}
       {message.replies && message.replies.length > 0 && (
         <div className="mt-2">
           {message.replies.map((reply: Message) => (
             <MessageComponent
               key={reply.id}
               message={reply}
-              isReply={true}
               currentUserId={currentUserId}
               onDelete={onDelete}
               onReaction={onReaction}
               onReply={onReply}
+              isSearchResult={isSearchResult}
             />
           ))}
         </div>

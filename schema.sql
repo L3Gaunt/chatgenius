@@ -181,6 +181,7 @@ RETURNS TABLE (
   updated_at TIMESTAMPTZ,
   user_id UUID,
   username TEXT,
+  attachments JSONB,
   similarity float
 ) AS $$
 BEGIN
@@ -193,6 +194,7 @@ BEGIN
       m.updated_at,
       p.id as user_id,
       p.username,
+      m.attachments,
       1 - (m.embedding <=> query_embedding) as similarity
     FROM messages m
     JOIN profiles p ON m.user_id = p.id
