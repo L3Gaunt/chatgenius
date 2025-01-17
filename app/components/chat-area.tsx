@@ -6,10 +6,9 @@ import { SearchBox } from './search-box'
 import { MessageComponent } from './message-component'
 import { ChatInput } from './chat-input'
 import { supabase } from '@/lib/supabase'
-import { Database } from '@/types/supabase'
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { User, Hash, X } from 'lucide-react'
-import { Message, transformDatabaseMessage } from "@/types/message"
+import { Message } from "@/types/message"
 import { Button } from "@/components/ui/button"
 import { toast } from 'sonner'
 import { SearchResults } from './search-results'
@@ -34,6 +33,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [shouldScrollToBottom, setShouldScrollToBottom] = useState(true)
 
   // Add effect to get current user
   useEffect(() => {
@@ -255,10 +255,10 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
 
                 // If it's a reply, find the parent message and remove the reply
                 return prev.map(msg => {
-                  if (msg.replies?.some(reply => reply.id === payload.old?.id)) {
+                  if (msg.replies?.some((reply: Message) => reply.id === payload.old?.id)) {
                     return {
                       ...msg,
-                      replies: msg.replies.filter(reply => reply.id !== payload.old?.id)
+                      replies: msg.replies.filter((reply: Message) => reply.id !== payload.old?.id)
                     }
                   }
                   return msg
@@ -312,6 +312,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
 
                 setMessages(prev => {
                   if (payload.eventType === 'INSERT') {
+                    setShouldScrollToBottom(true) // Scroll for new messages
                     if (transformedMessage.parent_message_id) {
                       // Add reply to parent message
                       return prev.map(msg => {
@@ -327,15 +328,16 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
                     // Add new top-level message
                     return [...prev, transformedMessage]
                   } else {
+                    setShouldScrollToBottom(false) // Don't scroll for updates
                     // Update existing message
                     return prev.map(msg => {
                       if (msg.id === transformedMessage.id) {
                         return transformedMessage
                       }
-                      if (msg.replies?.some(reply => reply.id === transformedMessage.id)) {
+                      if (msg.replies?.some((reply: Message) => reply.id === transformedMessage.id)) {
                         return {
                           ...msg,
-                          replies: msg.replies.map(reply =>
+                          replies: msg.replies.map((reply: Message) =>
                             reply.id === transformedMessage.id ? transformedMessage : reply
                           )
                         }
@@ -416,10 +418,10 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
                 if (msg.id === messageId) {
                   return transformedMessage
                 }
-                if (msg.replies?.some(reply => reply.id === messageId)) {
+                if (msg.replies?.some((reply: Message) => reply.id === messageId)) {
                   return {
                     ...msg,
-                    replies: msg.replies.map(reply =>
+                    replies: msg.replies.map((reply: Message) =>
                       reply.id === messageId ? transformedMessage : reply
                     )
                   }
@@ -460,6 +462,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
   }
 
   const handleSendMessage = async (content: string, attachments: File[]) => {
+    setShouldScrollToBottom(true) // Scroll for new messages
     if (!currentUserId) return
 
     try {
@@ -553,6 +556,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
   }
 
   const handleReaction = async (messageId: string, emoji: string) => {
+    setShouldScrollToBottom(false) // Don't scroll for reactions
     const { data: userData } = await supabase.auth.getUser()
     if (!userData.user) return
 
@@ -604,8 +608,10 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
   }
 
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+    if (shouldScrollToBottom) {
+      scrollToBottom()
+    }
+  }, [messages, shouldScrollToBottom])
 
   const handleReply = (message: Message) => {
     setReplyingTo(message)
@@ -666,21 +672,13 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
         </ScrollArea>
         {isSearchOpen && (
           <SearchResults 
-            results={searchResults.map(msg => ({
-              type: 'message',
-              id: msg.id,
-              user: msg.user?.username || 'Unknown',
-              content: msg.content,
-              timestamp: new Date(msg.created_at).toLocaleTimeString([], { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-              })
-            }))}
+            results={searchResults}
             isOpen={isSearchOpen}
             onClose={() => {
               setIsSearchOpen(false)
               setSearchResults([])
             }}
+            currentUserId={currentUserId}
           />
         )}
       </div>

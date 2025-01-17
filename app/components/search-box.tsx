@@ -3,9 +3,10 @@ import { Search } from 'lucide-react'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Message } from "../types/message"
+import { FileSearchResult, PersonSearchResult } from "../types/search"
 
 interface SearchBoxProps {
-  onSearch: (messages: Message[]) => void;
+  onSearch: (results: (Message | FileSearchResult | PersonSearchResult)[]) => void;
   onFocus?: () => void;
 }
 

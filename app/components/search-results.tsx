@@ -3,29 +3,41 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
+import { Message } from "../types/message"
+import { MessageComponent } from './message-component'
 
-interface SearchResult {
-  type: 'message' | 'file' | 'person';
+interface FileSearchResult {
+  type: 'file';
   id: number;
-  user: string;
-  content: string;
-  timestamp?: string;
-  fileType?: string;
-  status?: 'online' | 'offline' | 'away';
+  name: string;
+  fileType: string;
+  sharedBy: string;
+  sharedAt: string;
 }
+
+interface PersonSearchResult {
+  type: 'person';
+  id: number;
+  name: string;
+  status: 'online' | 'offline' | 'away';
+  title: string;
+}
+
+type SearchResult = Message | FileSearchResult | PersonSearchResult;
 
 interface SearchResultsProps {
   results: SearchResult[];
   onClose: () => void;
   isOpen: boolean;
+  currentUserId?: string;
 }
 
-export function SearchResults({ results, onClose, isOpen }: SearchResultsProps) {
+export function SearchResults({ results, onClose, isOpen, currentUserId }: SearchResultsProps) {
   if (!isOpen) return null;
 
-  const messageResults = results.filter(r => r.type === 'message');
-  const fileResults = results.filter(r => r.type === 'file');
-  const personResults = results.filter(r => r.type === 'person');
+  const messageResults = results.filter((r): r is Message => 'content' in r && 'user' in r);
+  const fileResults = results.filter((r): r is FileSearchResult => 'type' in r && r.type === 'file');
+  const personResults = results.filter((r): r is PersonSearchResult => 'type' in r && r.type === 'person');
 
   return (
     <div className="w-80 border-l bg-background flex flex-col h-full">
@@ -51,16 +63,12 @@ export function SearchResults({ results, onClose, isOpen }: SearchResultsProps) 
         <TabsContent value="messages" className="flex-1 p-0">
           <ScrollArea className="h-[calc(100vh-10rem)]">
             <div className="p-4 space-y-2">
-              {messageResults.map((result) => (
-                <Card key={result.id}>
-                  <CardContent className="p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="font-medium">{result.user}</span>
-                      <span className="text-xs text-muted-foreground">{result.timestamp}</span>
-                    </div>
-                    <p className="text-sm">{result.content}</p>
-                  </CardContent>
-                </Card>
+              {messageResults.map((message) => (
+                <MessageComponent
+                  key={message.id}
+                  message={message}
+                  currentUserId={currentUserId}
+                />
               ))}
             </div>
           </ScrollArea>
@@ -74,9 +82,9 @@ export function SearchResults({ results, onClose, isOpen }: SearchResultsProps) 
                     <div className="flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
                       <div>
-                        <div className="font-medium">{result.content}</div>
+                        <div className="font-medium">{result.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {result.fileType} • Shared by {result.user}
+                          {result.fileType} • Shared by {result.sharedBy} • {new Date(result.sharedAt).toLocaleString()}
                         </div>
                       </div>
                     </div>
@@ -101,8 +109,8 @@ export function SearchResults({ results, onClose, isOpen }: SearchResultsProps) 
                         }`} />
                       </div>
                       <div>
-                        <div className="font-medium">{result.user}</div>
-                        <div className="text-xs text-muted-foreground">{result.content}</div>
+                        <div className="font-medium">{result.name}</div>
+                        <div className="text-xs text-muted-foreground">{result.title}</div>
                       </div>
                     </div>
                   </CardContent>
