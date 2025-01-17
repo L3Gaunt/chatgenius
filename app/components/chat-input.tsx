@@ -5,12 +5,9 @@ import { Send, X, Paperclip } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FileAttachment } from './file-attachment'
-import { Database } from '@/types/supabase'
-import { Message } from "../types/message"
+import { DatabaseMessage, DatabaseProfile } from '@/types/database'
+import { Message } from "@/types/message"
 import { toast } from 'sonner'
-
-type DatabaseMessage = Database['public']['Tables']['messages']['Row']
-type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
 

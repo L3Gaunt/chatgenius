@@ -9,17 +9,14 @@ import { supabase } from '@/lib/supabase'
 import { Database } from '@/types/supabase'
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { User, Hash, X } from 'lucide-react'
-import { Message, transformDatabaseMessage } from "../types/message"
+import { Message, transformDatabaseMessage } from "@/types/message"
 import { Button } from "@/components/ui/button"
 import { toast } from 'sonner'
 import { SearchResults } from './search-results'
+import { DatabaseMessage, DatabaseProfile, Channel, DatabaseReaction } from "@/types/database"
 
-type DatabaseMessage = Database['public']['Tables']['messages']['Row']
-type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
-type Channel = Database['public']['Tables']['channels']['Row']
-type DatabaseReaction = Database['public']['Tables']['reactions']['Row']
-type MessageRow = Database['public']['Tables']['messages']['Row']
-type ReactionRow = Database['public']['Tables']['reactions']['Row']
+type MessageRow = DatabaseMessage
+type ReactionRow = DatabaseReaction
 
 interface ChatAreaProps {
   channelId?: string;

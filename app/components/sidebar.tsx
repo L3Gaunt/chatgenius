@@ -4,7 +4,7 @@ import { Hash, ChevronDown, User, Plus, Trash2, LogOut } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog"
 import { supabase } from '@/lib/supabase'
-import type { Database, Profile } from '@/types/supabase'
+import { Channel, DatabaseProfile } from '@/types/database'
 import { useRouter } from 'next/navigation'
 import {
   Tooltip,
@@ -13,8 +13,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-type Channel = Database['public']['Tables']['channels']['Row']
-
 interface SidebarProps {
   onChannelSelect?: (channelId: string) => void;
   onDirectMessageSelect?: (userId: string) => void;
@@ -22,7 +20,7 @@ interface SidebarProps {
 
 export function Sidebar({ onChannelSelect, onDirectMessageSelect }: SidebarProps) {
   const [channels, setChannels] = useState<Channel[]>([])
-  const [directMessages, setDirectMessages] = useState<Profile[]>([])
+  const [directMessages, setDirectMessages] = useState<DatabaseProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
   const router = useRouter()

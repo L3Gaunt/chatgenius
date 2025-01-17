@@ -1,6 +1,7 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { DatabaseMessage } from '@/types/database'
 
 export async function DELETE(
   request: Request,
@@ -14,12 +15,12 @@ export async function DELETE(
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    // 1. Get the message and verify ownership
+    // Get the message and verify ownership
     const { data: message } = await supabase
       .from('messages')
       .select('attachments, user_id')
       .eq('id', params.messageId)
-      .single()
+      .single<DatabaseMessage>()
 
     if (!message) {
       return new NextResponse('Message not found', { status: 404 })
@@ -29,7 +30,7 @@ export async function DELETE(
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    // 2. Delete the message first (this will cascade delete reactions due to our schema)
+    // Delete the message (will cascade delete reactions)
     const { error: deleteError } = await supabase
       .from('messages')
       .delete()
@@ -39,9 +40,8 @@ export async function DELETE(
       throw deleteError
     }
 
-    // 3. Clean up attachments asynchronously after message is deleted
-    if (message.attachments && message.attachments.length > 0) {
-      // Don't await this operation since we don't need to block the response
+    // Clean up attachments asynchronously
+    if (message.attachments && Array.isArray(message.attachments) && message.attachments.length > 0) {
       Promise.all(
         (message.attachments as { id: string }[]).map(attachment =>
           supabase.storage

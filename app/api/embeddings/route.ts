@@ -6,9 +6,11 @@ import OpenAI from 'openai'
 import { WebPDFLoader } from "@langchain/community/document_loaders/web/pdf"
 import { Document } from "@langchain/core/documents"
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-})
+interface PDFAttachment {
+  id: string
+  url: string
+  name: string
+}
 
 // Create a Supabase client with the service role key
 const supabaseAdmin = createClient(
@@ -22,11 +24,9 @@ const supabaseAdmin = createClient(
   }
 )
 
-interface PDFAttachment {
-  id: string
-  url: string
-  name: string
-}
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+})
 
 async function processPDFAttachment(messageId: string, attachment: PDFAttachment) {
   try {
