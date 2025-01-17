@@ -1,36 +1,9 @@
-import { Json } from './supabase'
+import { Json, Database } from '../../types/supabase'
 
-export type DatabaseMessage = {
-  id: string;
-  content: string;
-  channel_id: string;
-  user_id: string | null;
-  parent_message_id: string | null;
-  attachments: Json;
-  timestamp: string;
-  created_at: string;
-  updated_at: string;
-}
+export type DatabaseMessage = Database['public']['Tables']['messages']['Row']
 
-export type DatabaseProfile = {
-  id: string;
-  username: string;
-  created_at: string;
-  updated_at: string;
-}
+export type DatabaseProfile = Database['public']['Tables']['profiles']['Row']
 
-export type Channel = {
-  id: string;
-  name: string;
-  type: 'public' | 'private' | 'direct';
-  created_at: string;
-  updated_at: string;
-}
+export type Channel = Database['public']['Tables']['channels']['Row']
 
-export type DatabaseReaction = {
-  id: string;
-  message_id: string;
-  user_id: string;
-  emoji: string;
-  created_at: string;
-} 
+export type DatabaseReaction = Database['public']['Tables']['reactions']['Row'] 

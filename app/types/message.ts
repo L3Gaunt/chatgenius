@@ -1,5 +1,5 @@
-import { DatabaseProfile } from './database'
-import { Json } from './supabase'
+import { DatabaseProfile, DatabaseMessage } from './database'
+import { Json } from '../../types/supabase'
 
 export interface Message {
   id: string;
