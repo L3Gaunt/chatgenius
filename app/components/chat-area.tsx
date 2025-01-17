@@ -671,7 +671,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
           <SearchResults 
             results={searchResults.map(msg => ({
               type: 'message',
-              id: parseInt(msg.id),
+              id: msg.id,
               user: msg.user?.username || 'Unknown',
               content: msg.content,
               timestamp: new Date(msg.created_at).toLocaleTimeString([], { 
