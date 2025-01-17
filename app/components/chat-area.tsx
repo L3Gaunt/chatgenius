@@ -11,9 +11,9 @@ import { User, Hash, X } from 'lucide-react'
 import { Message } from "@/app/types/message"
 import { Button } from "@/components/ui/button"
 import { toast } from 'sonner'
-import { SearchResults } from './search-results'
 import { DatabaseMessage, DatabaseProfile, Channel, DatabaseReaction } from "@/app/types/database"
-import { FileSearchResult } from "@/app/types/search"
+import { SearchResults as SearchResultsType, FileSearchResult } from "@/app/types/search"
+import { SearchResults } from './search-results'
 
 type MessageRow = DatabaseMessage
 type ReactionRow = DatabaseReaction
@@ -34,7 +34,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
   const [channel, setChannel] = useState<Channel | null>(null)
   const [dmUser, setDmUser] = useState<DatabaseProfile | null>(null)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
-  const [searchResults, setSearchResults] = useState<{ messages: Message[]; files: FileSearchResult[] }>({ messages: [], files: [] })
+  const [searchResults, setSearchResults] = useState<SearchResultsType>({ messages: [], files: [], people: [] })
   const [currentUserId, setCurrentUserId] = useState<string>('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
@@ -601,8 +601,8 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
     }
   }
 
-  const handleSearch = (results: { messages: Message[]; files: FileSearchResult[] }) => {
-    const { messages, files } = results
+  const handleSearch = (results: SearchResultsType) => {
+    const { messages, files, people } = results
     if (messages.length === 0 && files.length === 0) {
       // No results
       setNoResultsMessage("No results found")
@@ -691,11 +691,7 @@ export function ChatArea({ channelId, userId }: ChatAreaProps) {
         )}
         {isSearchOpen && (
           <SearchResults 
-            results={{
-              messages: searchResults.messages,
-              files: searchResults.files,
-              people: [] // or whatever you need
-            }}
+            results={searchResults}
             onClose={() => setIsSearchOpen(false)}
             isOpen={isSearchOpen}
             currentUserId={userId ?? ''}

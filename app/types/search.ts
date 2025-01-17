@@ -9,8 +9,11 @@ export interface FileSearchResult {
 export interface PersonSearchResult {
   id: string;
   name: string;
+  fullName: string;
+  avatarUrl: string | null;
   status: 'online' | 'offline' | 'away';
   title: string;
+  lastSeenAt: string | null;
 }
 
 import { Message } from "./message";

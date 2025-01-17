@@ -3,10 +3,10 @@ import { Search } from 'lucide-react'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Message } from "../types/message"
-import { FileSearchResult } from "../types/search"
+import { SearchResults } from "../types/search"
 
 interface SearchBoxProps {
-  onSearch: (results: { messages: Message[]; files: FileSearchResult[] }) => void
+  onSearch: (results: SearchResults) => void
 }
 
 export function SearchBox({ onSearch }: SearchBoxProps) {
@@ -19,14 +19,13 @@ export function SearchBox({ onSearch }: SearchBoxProps) {
 
     setIsSearching(true)
     try {
-      // Expecting our /api/embeddings/search route to return { messages, files }.
       const response = await fetch(`/api/embeddings/search?query=${encodeURIComponent(query)}`)
       if (!response.ok) {
         throw new Error('Search failed.')
       }
 
-      const { messages = [], files = [] } = await response.json()
-      onSearch({ messages, files })
+      const { messages = [], files = [], people = [] } = await response.json()
+      onSearch({ messages, files, people })
     } catch (error) {
       console.error('Error searching:', error)
     } finally {

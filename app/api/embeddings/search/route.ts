@@ -54,6 +54,29 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to search messages' }, { status: 500 })
     }
 
+    // Search for people based on username and full name
+    const messageAuthors = messageRows.map((row: any) => ({
+      id: row.user_id,
+      username: row.username,
+      created_at: row.user_created_at || row.created_at,
+      updated_at: row.user_updated_at || row.updated_at
+    }));
+
+    const { data: peopleRows, error: peopleError } = await supabase
+      .from('profiles')
+      .select('id, username, created_at, updated_at')
+      .or(`username.ilike.%${query}%`)
+      .limit(MAX_RESULTS)
+
+    if (peopleError) {
+      console.error('People search error:', peopleError)
+      return NextResponse.json({ error: 'Failed to search people' }, { status: 500 })
+    }
+
+    // Combine and deduplicate people results
+    const combinedPeople = [...messageAuthors, ...peopleRows];
+    const uniquePeople = Array.from(new Map(combinedPeople.map(person => [person.id, person])).values());
+
     // Search file chunks
     const { data: fileRows, error: fileError } = await supabase
       .rpc('search_file_chunks', {
@@ -107,16 +130,28 @@ export async function GET(request: Request) {
       sharedAt: row.created_at
     }))
 
-    // Add mock people results for now
-    const people: PersonSearchResult[] = messageRows
-      .filter((row: any) => row.user_id && row.username)
-      .slice(0, MAX_RESULTS)
-      .map((row: any) => ({
-        id: row.user_id,
+    // Transform people rows with online status
+    const people: PersonSearchResult[] = uniquePeople.map((row: any) => {
+      const lastSeen = new Date(row.updated_at || 0);
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      
+      let status: 'online' | 'offline' | 'away' = 'offline';
+      if (lastSeen > fiveMinutesAgo) {
+        status = 'online';
+      } else if (lastSeen > new Date(Date.now() - 30 * 60 * 1000)) {
+        status = 'away';
+      }
+
+      return {
+        id: row.id,
         name: row.username,
-        status: 'offline',
-        title: row.full_name || 'User'
-      }))
+        fullName: row.username,
+        avatarUrl: null,
+        status,
+        title: row.username,
+        lastSeenAt: row.updated_at
+      };
+    });
 
     const results: SearchResults = {
       messages,

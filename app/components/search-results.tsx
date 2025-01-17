@@ -104,15 +104,28 @@ export function SearchResults({ results, onClose, isOpen, currentUserId }: Searc
                   <CardContent className="p-4">
                     <div className="flex items-center">
                       <div className="relative mr-2">
-                        <User className="w-6 h-6" />
+                        {result.avatarUrl ? (
+                          <img 
+                            src={result.avatarUrl} 
+                            alt={result.name}
+                            className="w-8 h-8 rounded-full"
+                          />
+                        ) : (
+                          <User className="w-8 h-8" />
+                        )}
                         <div className={`absolute bottom-0 right-0 w-2 h-2 rounded-full ${
                           result.status === 'online' ? 'bg-green-500' :
                           result.status === 'away' ? 'bg-yellow-500' : 'bg-gray-500'
                         }`} />
                       </div>
-                      <div>
+                      <div className="ml-3">
                         <div className="font-medium">{result.name}</div>
-                        <div className="text-xs text-muted-foreground">{result.title}</div>
+                        <div className="text-sm text-muted-foreground">{result.fullName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {result.status === 'online' ? 'Online' :
+                           result.status === 'away' ? 'Away' :
+                           result.lastSeenAt ? `Last seen ${new Date(result.lastSeenAt).toLocaleString()}` : 'Offline'}
+                        </div>
                       </div>
                     </div>
                   </CardContent>
