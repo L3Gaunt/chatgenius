@@ -54,14 +54,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to search messages' }, { status: 500 })
     }
 
-    // Search for people based on username and full name
-    const messageAuthors = messageRows.map((row: any) => ({
-      id: row.user_id,
-      username: row.username,
-      created_at: row.user_created_at || row.created_at,
-      updated_at: row.user_updated_at || row.updated_at
-    }));
-
     const { data: peopleRows, error: peopleError } = await supabase
       .from('profiles')
       .select('id, username, created_at, updated_at')
