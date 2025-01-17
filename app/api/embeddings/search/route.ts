@@ -58,12 +58,12 @@ export async function GET(request: Request) {
       id: row.id,
       content: row.content,
       channel_id: row.channel_id,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
       similarity: row.similarity,
       user: {
         id: row.user_id,
         username: row.username,
-        created_at: row.user_created_at,
-        updated_at: row.user_updated_at,
       },
     }))
 

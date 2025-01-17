@@ -40,7 +40,12 @@ export const MessageComponent = ({
       <div className="flex items-baseline justify-between">
         <div className="flex items-center">
           <span className="font-bold mr-2">{message.user.username}</span>
-          <span className="text-xs text-gray-500 ml-2">{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          <span className="text-xs text-gray-500 ml-2">
+            {new Date(message.created_at).toLocaleTimeString([], { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            })}
+          </span>
         </div>
         {canDelete && (
           <DeleteConfirmationDialog

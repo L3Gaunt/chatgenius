@@ -176,10 +176,10 @@ RETURNS TABLE (
   id UUID,
   content TEXT,
   channel_id UUID,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
   user_id UUID,
   username TEXT,
-  user_created_at TIMESTAMPTZ,
-  user_updated_at TIMESTAMPTZ,
   similarity float
 ) AS $$
 BEGIN
@@ -188,10 +188,10 @@ BEGIN
       m.id,
       m.content,
       m.channel_id,
+      m.created_at,
+      m.updated_at,
       p.id as user_id,
       p.username,
-      p.created_at as user_created_at,
-      p.updated_at as user_updated_at,
       1 - (m.embedding <=> query_embedding) as similarity
     FROM messages m
     JOIN profiles p ON m.user_id = p.id
