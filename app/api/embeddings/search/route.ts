@@ -40,43 +40,52 @@ export async function GET(request: Request) {
     })
     const embedding = embeddingResponse.data[0].embedding
 
-    // Search messages
-    const { data: messageRows, error: messageError } = await supabase
-      .rpc('search_messages', {
-        query_embedding: embedding,
-        similarity_threshold: 0.0,
-        match_count: MAX_RESULTS,
-      })
-      .select('*')
-    
-    if (messageError) {
-      console.error('Message search error:', messageError)
+    // Run all searches in parallel
+    const [messageResult, peopleResult, fileResult] = await Promise.all([
+      // Search messages
+      supabase
+        .rpc('search_messages', {
+          query_embedding: embedding,
+          similarity_threshold: 0.0,
+          match_count: MAX_RESULTS,
+        })
+        .select('*'),
+
+      // Search people
+      supabase
+        .from('profiles')
+        .select('id, username, created_at, updated_at')
+        .or(`username.ilike.%${query}%`)
+        .limit(MAX_RESULTS),
+
+      // Search file chunks  
+      supabase
+        .rpc('search_file_chunks', {
+          query_embedding: embedding,
+          similarity_threshold: 0.0,
+          match_count: MAX_RESULTS,
+        })
+        .select('*')
+    ])
+
+    if (messageResult.error) {
+      console.error('Message search error:', messageResult.error)
       return NextResponse.json({ error: 'Failed to search messages' }, { status: 500 })
     }
 
-    const { data: peopleRows, error: peopleError } = await supabase
-      .from('profiles')
-      .select('id, username, created_at, updated_at')
-      .or(`username.ilike.%${query}%`)
-      .limit(MAX_RESULTS)
-
-    if (peopleError) {
-      console.error('People search error:', peopleError)
+    if (peopleResult.error) {
+      console.error('People search error:', peopleResult.error)
       return NextResponse.json({ error: 'Failed to search people' }, { status: 500 })
     }
-    // Search file chunks
-    const { data: fileRows, error: fileError } = await supabase
-      .rpc('search_file_chunks', {
-        query_embedding: embedding,
-        similarity_threshold: 0.0,
-        match_count: MAX_RESULTS,
-      })
-      .select('*')
 
-    if (fileError) {
-      console.error('File search error:', fileError)
+    if (fileResult.error) {
+      console.error('File search error:', fileResult.error)
       return NextResponse.json({ error: 'Failed to search files' }, { status: 500 })
     }
+
+    const messageRows = messageResult.data
+    const peopleRows = peopleResult.data
+    const fileRows = fileResult.data
 
     // Transform message rows
     const messages: Message[] = messageRows.map((row: any) => ({
