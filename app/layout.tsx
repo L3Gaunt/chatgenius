@@ -17,19 +17,8 @@ export default function RootLayout({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN') {
-        if (session?.user) {
-          supabase
-            .from('profiles')
-            .upsert({
-              id: session.user.id,
-              username: session.user.email?.split('@')[0] || 'user'
-            })
-            .then(({ error }) => {
-              if (error) console.error('Error updating profile:', error)
-            })
-        }
-      }
+      // Simply refresh the router on auth state changes
+      // Removed profile creation code - will rely on database trigger
       router.refresh()
     })
 
